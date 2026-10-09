@@ -44,6 +44,14 @@ Re-runs skip a stage when its `.stamp` (sha256 of the script plus input path, si
 - The widget's tiles are quantised with the overview's `vmax`, and the page uses the overview's stats for both layers so the look doesn't change when switching.
 - Chrome headless with `--virtual-time-budget` hangs when script files load. For browser checks use Python `playwright` with `channel="chrome"`; `.venv` has it but it isn't a declared dependency.
 
+## Input and utils
+
+The pipeline reads **NINA output only** (one FITS per frame, headers written by NINA). `utils/` holds side tools that are not part of the package or its tests; `utils/unpack_sharpcap.py` converts old SharpCap captures (Siril FITSEQ files, headers stripped) into per-frame FITS with NINA-style headers so they can be used as test data.
+
+## Samples (`samples/`)
+
+One linear stack per filter, from the 2025-02-28 SharpCap night: `ic1805/stack_{H,O,S}.fits` (Heart Nebula, 100 x 18 s each) and `m31/stack_{R,G,B}.fits` (Andromeda, about 50 x 18 s each, stacked with the 18 s master dark). Tile-compressed (RICE_1, 16-bit quantisation: error is 0.007 of the sky noise), about 7.5 MB each; astropy and Siril both read them. They are stacks, so they start the pipeline at align/finish, not at classify. Made by `firstlight` from the unpacked frames (`utils/unpack_sharpcap.py`); the raw frames are not in the repo. The stacks are gitignored (`samples/**/*.fits`; the folder is kept with a `.gitkeep`), so they exist only on the machine that made them; for now regenerate them or copy them over.
+
 ## Test data
 
 A real night lives at `~/Documents/N.I.N.A/2026-10-03/` (NGC 7000 and NGC 7635; H/O/S; mostly 300 s; no darks or flats). The camera is an SVBONY SV605 mono on a Windows NINA mini PC. Masters will be keyed by gain, offset, temperature (with a tolerance, since it drifts by a few tenths of a degree) and exposure.
