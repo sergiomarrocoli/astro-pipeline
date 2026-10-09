@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>firstlight</title>
+<style>
+:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--mute:#6e6e73;--line:#d2d2d7;--acc:#0a64d8;--accink:#fff;--ok:#1a7f37;--bad:#c62828;--log:#111;--logink:#d7d7d7}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--card:#222226;--ink:#f2f2f4;--mute:#9a9aa2;--line:#3a3a40;--acc:#4c9aff;--accink:#08121f;--ok:#4ac26b;--bad:#ff6b63;--log:#0b0b0c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,sans-serif}
+main{max-width:900px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:20px;margin:0 0 2px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 10px}
+.sub{color:var(--mute);margin:0 0 18px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row+.row{margin-top:8px}
+input[type=text]{flex:1;min-width:200px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+button{padding:7px 13px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+button.primary{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}button:disabled{opacity:.5;cursor:default}
+label.opt{display:flex;gap:7px;align-items:flex-start;margin:5px 0}label.opt small{color:var(--mute);display:block}
+table{border-collapse:collapse;width:100%}td,th{padding:4px 8px 4px 0;text-align:left;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:500}
+.note{color:var(--mute)}.err{color:var(--bad)}.ok{color:var(--ok)}
+pre{background:var(--log);color:var(--logink);padding:10px;border-radius:8px;height:260px;overflow:auto;margin:0;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+.hide{display:none}select{padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+details summary{cursor:pointer;color:var(--mute)}
+</style></head><body><main>
+<h1>firstlight</h1><p class="sub">Pick a night's folder of FITS frames. Stacks, a starless/stars layer set, a colour widget and a report come out.</p>
+
+<section><h2>1 · Night folder</h2>
+ <div class="row"><input id="folder" type="text" placeholder="Folder of raw FITS frames (never modified)"><button id="pick">Choose…</button><button id="scan">Scan</button></div>
+ <div id="found" class="hide" style="margin-top:10px"></div>
+ <div id="scanmsg" class="note"></div>
+</section>
+
+<section id="opts" class="hide"><h2>2 · Options</h2>
+ <div class="row"><span>Target</span><select id="target"></select><span>Filter</span><select id="filter"><option value="">all</option></select></div>
+ <div class="row"><span style="min-width:60px">Output</span><input id="out" type="text"><button id="pickout">Choose…</button></div>
+ <div id="steps" style="margin-top:8px"></div>
+ <details style="margin-top:6px"><summary>More</summary>
+  <label class="opt"><input type="checkbox" id="all-exposures"><span>Stack all exposure lengths together<small>otherwise only the exposure with most integration per filter</small></span></label>
+  <label class="opt"><input type="checkbox" id="no-hot-pixel-fix"><span>Skip the hot-pixel fix</span></label>
+  <label class="opt"><input type="checkbox" id="no-reject-frames"><span>Keep poor-quality frames</span></label>
+  <label class="opt"><input type="checkbox" id="no-darks"><span>Ignore the dark library</span></label>
+  <label class="opt"><input type="checkbox" id="no-widget-enhance"><span>Widget shows only what the options above select</span></label>
+  <label class="opt"><input type="checkbox" id="dry-run"><span>Dry run<small>write the Siril scripts without running them</small></span></label>
+ </details>
+ <div class="row" style="margin-top:12px"><button id="run" class="primary">Run</button><span id="status" class="note"></span></div>
+</section>
+
+<section id="runbox" class="hide"><h2>3 · Progress</h2><pre id="log"></pre><div id="results" style="margin-top:10px"></div></section>
+
+<section><h2>Dark library</h2>
+ <div class="note" id="libpath"></div><div id="lib" style="margin:6px 0"></div>
+ <div class="row"><input id="darkfolder" type="text" placeholder="Folder of dark frames to add (optional)"><button id="pickdark">Choose…</button><button id="adddark">Build masters</button></div>
+ <div id="libmsg" class="note"></div>
+</section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let api = null, timer = null, current = null;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hours = s => (s / 3600).toFixed(1) + ' h';
+
+async function init() {
+  api = window.pywebview.api;
+  const info = await api.info();
+  document.title = 'firstlight ' + info.version;
+  $('libpath').textContent = 'Masters are kept in ' + info.library;
+  $('steps').innerHTML = info.steps.map(s => `<label class="opt"><input type="checkbox" id="${esc(s.flag)}"><span>${esc(s.label)}</span></label>`).join('');
+  refreshLibrary();
+}
+window.addEventListener('pywebviewready', init);
+
+async function refreshLibrary() {
+  const m = await api.library();
+  $('lib').innerHTML = m.length ? '<table><tr><th>Conditions</th><th>Temp</th><th>Frames</th><th>Built</th></tr>' +
+    m.map(x => `<tr><td>${esc(x.label)}</td><td>${x.temp == null ? '?' : x.temp.toFixed(1) + ' °C'}</td><td>${x.frames}</td><td>${esc(x.built)}</td></tr>`).join('') + '</table>'
+    : '<span class="note">No master darks yet. Darks found in a night folder are added automatically on each run.</span>';
+}
+
+$('pick').onclick = async () => { const f = await api.pick_folder($('folder').value || null); if (f) { $('folder').value = f; scan(); } };
+$('scan').onclick = scan;
+$('pickout').onclick = async () => { const f = await api.pick_folder($('out').value || null); if (f) $('out').value = f; };
+$('pickdark').onclick = async () => { const f = await api.pick_folder(); if (f) $('darkfolder').value = f; };
+
+async function scan() {
+  const folder = $('folder').value.trim(); if (!folder) return;
+  $('scanmsg').textContent = 'Reading headers…'; $('found').classList.add('hide');
+  const s = await api.scan(folder); current = s;
+  if (s.error && !s.targets) { $('scanmsg').innerHTML = `<span class="err">${esc(s.error)}</span>`; $('opts').classList.add('hide'); return; }
+  $('scanmsg').innerHTML = s.error ? `<span class="err">${esc(s.error)}</span>` : '';
+  $('found').classList.remove('hide');
+  $('found').innerHTML = '<table><tr><th>Target</th><th>Frames per filter</th><th>Integration</th></tr>' + s.targets.map(t =>
+    `<tr><td>${esc(t.name)}</td><td>${Object.entries(t.filters).map(([f, n]) => esc(f) + ' ' + n).join(' · ')}</td><td>${hours(t.seconds)}</td></tr>`).join('') + '</table>' +
+    `<div class="note" style="margin-top:6px">Calibration frames: ${s.calibration.dark} dark, ${s.calibration.flat} flat, ${s.calibration.bias} bias.${s.calibration.dark ? ' Darks are added to the library on Run.' : ''}</div>`;
+  $('target').innerHTML = '<option value="">all targets</option>' + s.targets.map(t => `<option>${esc(t.name)}</option>`).join('');
+  const filters = [...new Set(s.targets.flatMap(t => Object.keys(t.filters)))];
+  $('filter').innerHTML = '<option value="">all</option>' + filters.map(f => `<option>${esc(f)}</option>`).join('');
+  $('out').value = s.output;
+  $('opts').classList.toggle('hide', !s.targets.length);
+}
+
+$('adddark').onclick = async () => {
+  const f = $('darkfolder').value.trim(); if (!f) return;
+  $('libmsg').textContent = 'Reading darks…';
+  const s = await api.scan(f);
+  $('libmsg').textContent = s.calibration && s.calibration.dark ? `${s.calibration.dark} dark frames found. Running a night with them in its folder builds masters, or use: firstlight-library add "${f}"` : 'No dark frames found there (IMAGETYP must say Dark).';
+};
+
+$('run').onclick = async () => {
+  const opts = {target: $('target').value, filter: $('filter').value};
+  document.querySelectorAll('#opts input[type=checkbox]').forEach(c => { if (c.checked) opts[c.id] = true; });
+  $('log').textContent = ''; $('results').innerHTML = ''; $('runbox').classList.remove('hide');
+  const r = await api.start($('folder').value.trim(), $('out').value.trim(), opts);
+  if (r.error) { $('status').innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
+  $('run').disabled = true; $('status').textContent = 'Running… this takes a while on a full night.';
+  timer = setInterval(poll, 700);
+};
+
+async function poll() {
+  const p = await api.poll(), log = $('log'), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  if (p.lines.length) { log.textContent += p.lines.join('\n') + '\n'; if (stick) log.scrollTop = log.scrollHeight; }
+  if (p.state === 'running') return;
+  clearInterval(timer); $('run').disabled = false;
+  $('status').innerHTML = p.state === 'done' ? '<span class="ok">Finished.</span>' : '<span class="err">Finished with errors, see the log.</span>';
+  $('results').innerHTML = p.results.map(r => `<div class="row"><strong>${esc(r.target)}</strong>` +
+    ['widget', 'report', 'draft'].filter(k => r[k]).map(k => `<button data-p="${esc(r[k])}">${k === 'widget' ? 'Open widget' : k === 'report' ? 'Open report' : 'Open draft'}</button>`).join('') + '</div>').join('') +
+    `<div class="row"><button data-p="${esc($('out').value)}">Show output folder</button></div>`;
+  $('results').querySelectorAll('button').forEach(b => b.onclick = () => api.reveal(b.dataset.p));
+  refreshLibrary();
+}
+</script></body></html>

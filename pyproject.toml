@@ -1,0 +1,31 @@
+[project]
+name = "firstlight"
+version = "0.1.0"
+description = "One-command previews of a night's astrophotography"
+requires-python = ">=3.10"
+dependencies = ["astropy>=6", "pillow>=10"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+app = ["pywebview>=5"]
+package = ["pywebview>=5", "pyinstaller>=6"]
+
+[project.scripts]
+firstlight = "firstlight.cli:main"
+firstlight-library = "firstlight.calibration:main"
+
+[project.gui-scripts]
+firstlight-app = "firstlight.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["firstlight"]
+
+[tool.setuptools.package-data]
+firstlight = ["widget_template.html", "widget_dsp.js", "app_ui.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

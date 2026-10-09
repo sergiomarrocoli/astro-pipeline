@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>firstlight preview</title>
+<style>
+  :root { --bg:#0e0f12; --panel:#181a1f; --ink:#e6e7ea; --dim:#9094a0; --line:#2a2d35; --accent:#7fb0ff; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f2f3f5; --panel:#fff; --ink:#1b1d22; --dim:#5d6270; --line:#d9dce2; --accent:#1f5fd1; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 -apple-system, system-ui, sans-serif; }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 280px; gap:16px; padding:16px; max-width:1500px; margin:0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .view { --ar:1; aspect-ratio:var(--ar); width:min(100%, calc((100vh - 34px) * var(--ar))); justify-self:center;
+          position:relative; background:#000; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+          touch-action:none; cursor:grab; user-select:none; }
+  .view.dragging { cursor:grabbing; }
+  #stage { transform-origin:0 0; will-change:transform; }
+  #c { display:block; }
+  canvas.crisp { image-rendering:pixelated; }
+  #detail { position:absolute; left:0; top:0; transform-origin:0 0; pointer-events:none; display:none; }
+  .zoombar { position:absolute; left:10px; bottom:10px; display:flex; gap:4px; align-items:center;
+             background:rgba(20,22,27,.82); border:1px solid var(--line); border-radius:8px; padding:4px; color:#e6e7ea; }
+  .zoombar button { margin:0; width:auto; min-width:30px; padding:4px 8px; background:transparent; border:0; color:inherit; }
+  .zoombar button:hover { background:rgba(255,255,255,.12); }
+  #zmode { min-width:0 !important; padding:0 6px; font-size:11px !important; opacity:.8; }
+  .zoombar span { min-width:48px; text-align:center; font-size:12px; font-variant-numeric:tabular-nums; }
+  aside { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; align-self:start;
+          position:sticky; top:16px; max-height:calc(100vh - 32px); overflow-y:auto; }
+  h1 { font-size:15px; margin:0 0 2px; } .sub { color:var(--dim); font-size:12px; margin-bottom:12px; }
+  details { border-top:1px solid var(--line); padding:8px 0 4px; }
+  summary { cursor:pointer; font-size:13px; font-weight:600; padding:2px 0; list-style:none; display:flex; justify-content:space-between; }
+  summary::after { content:'+'; color:var(--dim); } details[open] summary::after { content:'\2212'; }
+  summary::-webkit-details-marker { display:none; }
+  .bands { display:flex; gap:6px; margin:8px 0; }
+  .band { flex:1; text-align:center; }
+  .band b { display:block; font-size:13px; margin-bottom:2px; }
+  .band select { padding:4px 2px; }
+  label { display:block; margin:10px 0 2px; font-size:12px; color:var(--dim); }
+  label span { float:right; color:var(--ink); font-variant-numeric:tabular-nums; }
+  input[type=range], select { width:100%; }
+  select { background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px; }
+  .row { display:flex; align-items:center; gap:8px; margin-top:10px; } .row label { margin:0; color:var(--ink); }
+  .pair { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+  button { margin-top:10px; width:100%; padding:7px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; border-top:1px solid var(--line); padding-top:6px; }
+  #hist { width:100%; height:56px; display:block; margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  .crop { position:absolute; display:none; border:1.5px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.55); cursor:move; touch-action:none;
+          background-image:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)),linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)),
+                           linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)),linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35));
+          background-size:1px 100%,1px 100%,100% 1px,100% 1px; background-position:33.33% 0,66.66% 0,0 33.33%,0 66.66%; background-repeat:no-repeat; }
+  .crop i { position:absolute; width:14px; height:14px; background:#fff; border-radius:50%; border:1px solid #000; box-sizing:border-box; touch-action:none; }
+  .crop i.nw { left:-8px; top:-8px; cursor:nwse-resize; } .crop i.ne { right:-8px; top:-8px; cursor:nesw-resize; }
+  .crop i.sw { left:-8px; bottom:-8px; cursor:nesw-resize; } .crop i.se { right:-8px; bottom:-8px; cursor:nwse-resize; }
+  .crop i.n { left:calc(50% - 7px); top:-8px; cursor:ns-resize; } .crop i.s { left:calc(50% - 7px); bottom:-8px; cursor:ns-resize; }
+  .crop i.w { top:calc(50% - 7px); left:-8px; cursor:ew-resize; } .crop i.e { top:calc(50% - 7px); right:-8px; cursor:ew-resize; }
+  .crop.locked i.n, .crop.locked i.s, .crop.locked i.w, .crop.locked i.e { display:none; }
+  .view.editing { cursor:default; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:6px; } .two button { margin-top:6px; }
+  .note { color:var(--dim); font-size:11px; margin-top:10px; } .hide { display:none; }
+  #ms { color:var(--dim); font-size:11px; float:right; font-weight:400; }
+</style>
+</head>
+<body>
+<main>
+  <div class="view" id="view">
+    <div id="stage"><canvas id="c"></canvas></div>
+    <canvas id="detail"></canvas>
+    <div class="crop" id="crop"><i class="nw" data-h="nw"></i><i class="n" data-h="n"></i><i class="ne" data-h="ne"></i><i class="e" data-h="e"></i><i class="se" data-h="se"></i><i class="s" data-h="s"></i><i class="sw" data-h="sw"></i><i class="w" data-h="w"></i></div>
+    <div class="zoombar">
+      <button id="zout" title="Zoom out (-)">&minus;</button><span id="zlevel">100%</span><button id="zin" title="Zoom in (+)">+</button>
+      <button id="zfit" title="Fit (0)">Fit</button><button id="z1" title="1 image pixel per screen pixel">1:1</button>
+      <span id="zmode" title="Which pixels are on screen"></span>
+    </div>
+  </div>
+  <aside>
+    <h1>Preview <span id="ms"></span></h1>
+    <div class="sub">Starless and stars layers, already processed. Play with colour and stretch here.</div>
+    <div class="note" id="info" style="margin-top:0"></div>
+
+    <details open><summary>Palette</summary>
+      <label>Preset <select id="palette"></select></label>
+      <div class="bands" id="bands"></div>
+      <button id="shuffle" type="button" style="margin-top:0">Shuffle bands</button>
+    </details>
+
+    <details open><summary>Nebula</summary>
+      <label>Brightness <span id="tbV"></span></label>
+      <input type="range" id="tb" min="0.05" max="0.45" step="0.01" value="0.22">
+      <label>Black point (σ) <span id="scV"></span></label>
+      <input type="range" id="sc" min="-5" max="0" step="0.1" value="-2.8">
+      <label>Contrast <span id="ctV"></span></label>
+      <input type="range" id="ct" min="0" max="1" step="0.05" value="0.15">
+      <label>Normalise
+        <select id="norm"><option value="signal">Match signal level</option><option value="none">None (background only)</option></select>
+      </label>
+      <div class="row"><input type="checkbox" id="link"><label for="link">Link channels (one stretch for all)</label></div>
+      <canvas id="hist" width="256" height="56"></canvas>
+    </details>
+
+    <details open><summary>Colour</summary>
+      <label>Colour smoothing <span id="csmV"></span></label>
+      <input type="range" id="csm" min="0" max="6" step="0.25" value="2">
+      <label>Saturation <span id="satV"></span></label>
+      <input type="range" id="sat" min="0" max="2.5" step="0.05" value="1.2">
+      <label>Remove green (SCNR) <span id="scnrV"></span></label>
+      <input type="range" id="scnr" min="0" max="1" step="0.05" value="0">
+      <label>Channel balance (R / G / B)</label>
+      <div class="pair">
+        <input type="range" id="gR" min="0.5" max="1.5" step="0.01" value="1" title="R gain">
+        <input type="range" id="gG" min="0.5" max="1.5" step="0.01" value="1" title="G gain">
+        <input type="range" id="gB" min="0.5" max="1.5" step="0.01" value="1" title="B gain">
+      </div>
+    </details>
+
+    <details open><summary>Stars</summary>
+      <label>Brightness <span id="sbrV"></span></label>
+      <input type="range" id="sbr" min="0" max="2" step="0.05" value="1">
+      <label>Boost faint stars <span id="skV"></span></label>
+      <input type="range" id="sk" min="0" max="3.7" step="0.05" value="1.5">
+      <label>Star colour <span id="scolV"></span></label>
+      <input type="range" id="scol" min="0" max="1.5" step="0.05" value="0.5">
+    </details>
+
+    <details open><summary>Frame</summary>
+      <label>Rotate (°) <span id="rotV"></span></label>
+      <input type="range" id="rot" min="-45" max="45" step="0.1" value="0">
+      <div class="two"><button id="rotl" type="button">&#8634; 90°</button><button id="rotr" type="button">90° &#8635;</button></div>
+      <label>Crop shape
+        <select id="aspect"><option value="orig">Original</option><option value="free">Free</option><option value="1:1">1 : 1</option>
+          <option value="4:3">4 : 3</option><option value="3:2">3 : 2</option><option value="16:9">16 : 9</option><option value="5:4">5 : 4</option><option value="4:5">4 : 5 (portrait)</option></select>
+      </label>
+      <div class="two"><button id="cropEdit" type="button">Edit crop</button><button id="cropFit" type="button" title="Largest crop with no empty corners">Fit inside</button></div>
+      <button id="frameReset" type="button" style="margin-top:6px">Reset frame</button>
+    </details>
+
+    <div class="btns"><button id="auto">Auto</button><button id="reset">Reset all</button><button id="save" style="grid-column:1/-1">Save PNG</button></div>
+    <div class="note">Scroll or pinch to zoom, drag to pan, double-click to zoom in or reset. Zoomed in, full-resolution tiles load from <code>widget_tiles/</code> next to this file. <b>Auto</b> re-detects the green-removal amount; the star boost comes from the stars themselves. Save PNG exports the framed image at overview resolution.</div>
+  </aside>
+</main>
+<script>
+const P = __PAYLOAD__;
+/*__DSP__*/
+const W = P.width, H = P.height, N = W * H;
+const canvas = document.getElementById('c'); canvas.width = W; canvas.height = H;
+const ctx = canvas.getContext('2d');
+const img = ctx.createImageData(W, H);
+const el = id => document.getElementById(id);
+
+// Decode: uint16 little-endian -> [0,1] floats, flipped vertically (FITS rows run bottom-up).
+function decode(b64) {
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const u = new Uint16Array(bytes.buffer), out = new Float32Array(N);
+  for (let y = 0; y < H; y++) { const s = (H - 1 - y) * W, d = y * W; for (let x = 0; x < W; x++) out[d + x] = u[s + x] / 65535; }
+  return out;
+}
+const chans = P.channels.map(c => ({ ...c, v: decode(c.data), sv: decode(c.sdata) }));   // v: starless, sv: stars
+const BAND_COLOUR = { R: '#ff6b6b', G: '#5fd38a', B: '#6aa9ff' };
+const NONE = -1;   // band left black
+el('info').textContent = P.info || '';
+
+// ---- Palette presets ----------------------------------------------------------------
+const ROLES = { h: 'H', ha: 'H', halpha: 'H', o: 'O', oiii: 'O', o3: 'O', s: 'S', sii: 'S', s2: 'S' };
+const roleOf = n => ROLES[n.toLowerCase().replace(/[^a-z0-9]/g, '')];
+const byRole = {}; chans.forEach((c, i) => { const r = roleOf(c.name); if (r) byRole[r] = i; });
+const PRESET_DEFS = [['SHO', 'SHO'], ['HSO', 'HSO'], ['OHS', 'OHS'], ['HOO', 'HOO'], ['OHH', 'OHH'], ['HSS', 'HSS']];   // HSS: H red, S cyan (no O needed)
+const presets = PRESET_DEFS.filter(([, spec]) => [...spec].every(r => r in byRole))
+  .map(([name, spec]) => ({ name, bands: [...spec].map(r => byRole[r]) }));
+let assign = [0, 1, 2].map(i => Math.max(0, P.channels.findIndex(c => c.name === P.default[i])));
+const presetOf = () => presets.find(p => p.bands.every((b, i) => b === assign[i]));
+function drawPalette() {
+  const cur = presetOf();
+  el('palette').innerHTML = presets.map(p => `<option value="${p.name}"${cur && cur.name === p.name ? ' selected' : ''}>${p.name}</option>`).join('')
+    + `<option value="custom"${cur ? '' : ' selected'}>Custom</option>`;
+}
+function drawBands() {
+  const opts = i => `<option value="${NONE}">none</option>` + chans.map((c, k) =>
+    `<option value="${k}"${assign[i] === k ? ' selected' : ''}>${c.name}</option>`).join('');
+  el('bands').innerHTML = ['R', 'G', 'B'].map((b, i) =>
+    `<div class="band"><b style="color:${BAND_COLOUR[b]}">${b}</b><select data-band="${i}">${opts(i)}</select></div>`).join('');
+  document.querySelectorAll('#bands select').forEach(s => s.addEventListener('change', e => {
+    assign[+e.target.dataset.band] = +e.target.value; drawPalette(); schedule(true);
+  }));
+  drawPalette();
+}
+el('palette').addEventListener('change', e => {
+  const p = presets.find(x => x.name === e.target.value);
+  if (p) { assign = p.bands.slice(); drawBands(); schedule(true); }
+});
+
+// ---- Parameters ------------------------------------------------------------------
+const PARAM_IDS = ['norm', 'tb', 'sc', 'ct', 'link', 'csm', 'sat', 'scnr', 'gR', 'gG', 'gB', 'sbr', 'sk', 'scol'];
+const fmt = { csm: v => v.toFixed(2), tb: v => v.toFixed(2), sc: v => v.toFixed(1), ct: v => v.toFixed(2), sat: v => v.toFixed(2), scnr: v => v.toFixed(2),
+  sbr: v => v.toFixed(2), sk: v => Math.round(Math.pow(10, v)), scol: v => v.toFixed(2) };
+const medianK = (() => { const k = P.channels.map(c => c.k).sort((a, b) => a - b); return k[k.length >> 1]; })();
+el('sk').value = el('sk').defaultValue = Math.log10(medianK).toFixed(2);       // auto: from the stars themselves
+
+function readParams() {
+  const q = {};
+  PARAM_IDS.forEach(id => { const e = el(id); q[id] = e.type === 'checkbox' ? e.checked : e.type === 'range' ? +e.value : e.value; });
+  for (const id in fmt) { const o = el(id + 'V'); if (o) o.textContent = fmt[id](q[id]); }
+  q.skK = Math.pow(10, q.sk);
+  return q;
+}
+
+// Per-band stretch state from the stats the page was given. cs[i] is null for a band set to "none".
+function stretchState(q) {
+  const used = assign.filter(k => k !== NONE).map(k => chans[k]);
+  const refP99 = used.length ? used.reduce((a, c) => a + c.p99, 0) / used.length : 1;
+  const S = { contrast: q.ct };
+  const cs = assign.map(k => {
+    if (k === NONE) return null;
+    const c = chans[k], scale = q.norm === 'signal' ? refP99 / c.p99 : 1, sig = c.sigma * scale;
+    const lo = q.sc * sig, hi = (1 - c.bg) * scale;
+    return { name: c.name, v: c.v, sv: c.sv, bg: c.bg, scale, lo, span: hi - lo, x0: (0 - lo) / (hi - lo) };
+  });
+  const live = cs.filter(Boolean), mAll = live.length ? live.reduce((a, c) => a + c.x0, 0) / live.length : 0.5;
+  cs.forEach(c => { if (c) c.m = solveM(q.link ? mAll : c.x0, q.tb); });
+  return { cs, S, g: [q.gR, q.gG, q.gB], q };
+}
+
+// Nebula colour of one pixel (stretch, balance, green removal, saturation), into out[0..2].
+// v0..v2: starless values of the three bands, in [0,1] as stored.
+function nebula(st, v0, v1, v2, out) {
+  const { cs, S, g, q } = st, c0 = cs[0], c1 = cs[1], c2 = cs[2];
+  let r = c0 ? stretchP(c0, (v0 - c0.bg) * c0.scale, S) * g[0] : 0;
+  let gr = c1 ? stretchP(c1, (v1 - c1.bg) * c1.scale, S) * g[1] : 0;
+  let b = c2 ? stretchP(c2, (v2 - c2.bg) * c2.scale, S) * g[2] : 0;
+  if (q.scnr > 0) gr = scnr(r, gr, b, q.scnr);
+  if (q.sat !== 1) { const y = (r + gr + b) / 3; r = y + q.sat * (r - y); gr = y + q.sat * (gr - y); b = y + q.sat * (b - y); }
+  out[0] = r; out[1] = gr; out[2] = b;
+}
+
+// Add the stars (stretch, colour) to a nebula colour with a screen blend and write the pixel.
+// s0..s2: stars values of the three bands, in [0,1] as stored.
+function finish(st, r, gr, b, s0, s1, s2, d, o) {
+  const { cs, q } = st;
+  r = r < 0 ? 0 : r > 1 ? 1 : r; gr = gr < 0 ? 0 : gr > 1 ? 1 : gr; b = b < 0 ? 0 : b > 1 ? 1 : b;
+  if (q.sbr > 0) {
+    const k = q.skK, a0 = cs[0] ? starStretch(k, s0) : 0, a1 = cs[1] ? starStretch(k, s1) : 0, a2 = cs[2] ? starStretch(k, s2) : 0;
+    // Star colour fades in with brightness: a faint speck that is above zero in only one filter is noise,
+    // not a coloured star, so it goes neutral while bright stars keep their colour.
+    const l = (a0 + a1 + a2) / 3, w = q.scol * (l >= 0.35 ? 1 : l / 0.35);
+    r = screen(r, Math.max(0, (l + w * (a0 - l)) * q.sbr));
+    gr = screen(gr, Math.max(0, (l + w * (a1 - l)) * q.sbr));
+    b = screen(b, Math.max(0, (l + w * (a2 - l)) * q.sbr));
+  }
+  d[o] = r * 255; d[o + 1] = gr * 255; d[o + 2] = b * 255; d[o + 3] = 255;        // Uint8ClampedArray clamps
+}
+const tmpRGB = [0, 0, 0];
+let CHROMA = null;     // smoothed overview chroma {cb, cr}, kept so the detail view can pair it with full-res luminance
+
+// Mean stretched nebula colour (no stars), used to detect how much green to remove.
+function nebulaMeans(q) {
+  const st = stretchState({ ...q, scnr: 0, sat: 1, sbr: 0 }), { cs, S, g } = st;
+  let r = 0, gg = 0, b = 0, n = 0;
+  for (let i = 0; i < N; i += 11) {
+    if (cs[0]) r += stretchP(cs[0], (cs[0].v[i] - cs[0].bg) * cs[0].scale, S) * g[0];
+    if (cs[1]) gg += stretchP(cs[1], (cs[1].v[i] - cs[1].bg) * cs[1].scale, S) * g[1];
+    if (cs[2]) b += stretchP(cs[2], (cs[2].v[i] - cs[2].bg) * cs[2].scale, S) * g[2];
+    n++;
+  }
+  return [r / n, gg / n, b / n];
+}
+function applyAuto() {
+  const [r, g, b] = nebulaMeans(readParams());
+  el('scnr').value = autoScnr(r, g, b).toFixed(2);
+}
+
+const NR = new Float32Array(N), NG = new Float32Array(N), NB = new Float32Array(N);
+function render() {
+  const t0 = performance.now(), q = readParams(), st = stretchState(q), d = img.data;
+  const [c0, c1, c2] = st.cs;
+  const a = c0 ? c0.v : null, b = c1 ? c1.v : null, c = c2 ? c2.v : null;
+  const sa = c0 ? c0.sv : null, sb = c1 ? c1.sv : null, sc_ = c2 ? c2.sv : null;
+  for (let i = 0; i < N; i++) {
+    nebula(st, a ? a[i] : 0, b ? b[i] : 0, c ? c[i] : 0, tmpRGB);
+    NR[i] = tmpRGB[0]; NG[i] = tmpRGB[1]; NB[i] = tmpRGB[2];
+  }
+  CHROMA = q.csm > 0 ? chromaSmooth(NR, NG, NB, W, H, q.csm) : null;     // colour noise is blurred, detail is not
+  const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  for (let i = 0, o = 0; i < N; i++, o += 4) {
+    finish(st, NR[i], NG[i], NB[i], sa ? sa[i] : 0, sb ? sb[i] : 0, sc_ ? sc_[i] : 0, d, o);
+    if ((i & 3) === 0) { hist[0][d[o]]++; hist[1][d[o + 1]]++; hist[2][d[o + 2]]++; }
+  }
+  ctx.putImageData(img, 0, 0);
+  drawHist(hist);
+  el('ms').textContent = Math.round(performance.now() - t0) + ' ms';
+  scheduleDetail();
+}
+
+function drawHist(hist) {
+  const h = el('hist'), c = h.getContext('2d'), w = h.width, ht = h.height;
+  c.clearRect(0, 0, w, ht);
+  const peak = Math.max(1, ...hist.map(a => Math.max(...a.slice(1, 255))));       // ignore the clipped end bins
+  c.globalCompositeOperation = 'lighter';
+  ['#ff4d4d', '#33d17a', '#4d8dff'].forEach((col, k) => {
+    c.fillStyle = col; c.globalAlpha = 0.85;
+    for (let x = 0; x < 256; x++) { const v = Math.sqrt(Math.min(hist[k][x], peak) / peak) * (ht - 2); c.fillRect(x, ht - v, 1, v); }
+  });
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+
+let pending = false;
+// auto = the palette or data changed, so re-detect the green-removal amount first
+const schedule = auto => { el('ms').textContent = '\u2026'; if (!pending) { pending = true; requestAnimationFrame(() => setTimeout(() => {
+  pending = false; if (auto) applyAuto(); render(); }, 15)); } };
+PARAM_IDS.forEach(id => el(id).addEventListener('input', () => schedule(false)));
+// Export the framed image (rotation + applied crop) at overview resolution.
+el('save').addEventListener('click', () => {
+  const g = frameGeom(W, H, F.rot, F.crop), out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(g.Rw)); out.height = Math.max(1, Math.round(g.Rh));
+  const c2 = out.getContext('2d'); c2.imageSmoothingQuality = 'high';
+  const m = frameMatrix(W, H, F.rot, g, 1); c2.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+  c2.drawImage(canvas, 0, 0);
+  out.toBlob(blob => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `preview_${assign.map(k => k === NONE ? 'x' : chans[k].name).join('')}.png`; a.click(); URL.revokeObjectURL(a.href);
+  });
+});
+el('auto').addEventListener('click', () => schedule(true));
+el('reset').addEventListener('click', () => {
+  PARAM_IDS.forEach(id => { const e = el(id);
+    if (e.type === 'checkbox') e.checked = e.defaultChecked;
+    else if (e.tagName === 'SELECT') e.selectedIndex = Math.max(0, [...e.options].findIndex(o => o.defaultSelected));
+    else e.value = e.defaultValue; });
+  assign = [0, 1, 2].map(i => Math.max(0, P.channels.findIndex(c => c.name === P.default[i])));
+  drawBands(); schedule(true);
+});
+el('shuffle').addEventListener('click', () => {
+  const n = chans.length;
+  if (n >= 3) { const idx = [...Array(n).keys()].sort(() => Math.random() - 0.5); assign = idx.slice(0, 3); }
+  else assign = [0, 1, 2].map(() => Math.floor(Math.random() * n));
+  drawBands(); schedule(true);
+});
+drawBands();
+
+// ---- Frame: rotate and crop, live on the processed layers --------------------------
+// F is the applied frame: rotation in degrees (clockwise) and a crop as fractions of the rotated image's
+// bounding box. While editing, the whole rotated image is shown with a draggable crop box on top.
+const F = { rot: 0, crop: [0, 0, 1, 1] };
+let editing = false, cropBox = [0, 0, 1, 1];
+const EDIT_PAD = 0.045;        // while editing, the image is shown with a margin so the crop handles are easy to grab
+const ASPECTS = { orig: W / H, '1:1': 1, '4:3': 4 / 3, '3:2': 3 / 2, '16:9': 16 / 9, '5:4': 5 / 4, '4:5': 4 / 5 };
+const aspectOf = () => el('aspect').value === 'orig' ? origAspect() : (ASPECTS[el('aspect').value] || null);   // null = free
+// The image's own shape in its current orientation: a quarter turn makes it portrait.
+const origAspect = () => Math.round(F.rot / 90) % 2 !== 0 ? H / W : W / H;
+const view = el('view'), stage = el('stage'), cropEl = el('crop');
+
+let FG = null;                                                        // layout of the frame currently shown
+function layoutFrame() {
+  let g = frameGeom(W, H, F.rot, editing ? [0, 0, 1, 1] : F.crop);
+  if (editing) g = { ...g, x0: -EDIT_PAD * g.Wb, y0: -EDIT_PAD * g.Hb, Rw: g.Wb * (1 + 2 * EDIT_PAD), Rh: g.Hb * (1 + 2 * EDIT_PAD) };
+  view.style.setProperty('--ar', g.Rw / g.Rh);                        // the view takes the shape of the crop
+  const k = view.clientWidth / g.Rw;                                  // screen px per overview px at fit
+  FG = { g, k, m: frameMatrix(W, H, F.rot, g, k) };
+  if (editing) placeCrop();
+}
+function placeCrop() {
+  const { g, k } = FG;
+  Object.assign(cropEl.style, { display: 'block', left: (cropBox[0] * g.Wb - g.x0) * k + 'px', top: (cropBox[1] * g.Hb - g.y0) * k + 'px',
+    width: (cropBox[2] - cropBox[0]) * g.Wb * k + 'px', height: (cropBox[3] - cropBox[1]) * g.Hb * k + 'px' });
+  cropEl.classList.toggle('locked', !!aspectOf());
+}
+
+// ---- Zoom and pan -------------------------------------------------------------
+// The canvas keeps its natural size; a CSS transform on #stage applies the frame (rotate + crop) and then
+// the zoom, so no re-render is needed. Zoom 1 = fit. Zoom is reported relative to the data pixels.
+view.style.setProperty('--ar', W / H);
+const Z = { s: 1, x: 0, y: 0 };
+const MAX_ZOOM = 4;                                        // screen px per data px
+const viewSize = () => ({ w: view.clientWidth, h: view.clientHeight });
+const T = P.tiles;                                         // null when widget_tiles/ was not generated
+let tilesFailed = false;
+const haveDetail = () => !!T && !tilesFailed;
+const unitW = () => haveDetail() ? T.w : W;                 // zoom is reported in full-res px when we have them
+const dataZoom = () => Z.s * FG.k * W / unitW();            // screen px per data px
+const maxScale = () => Math.max(1, MAX_ZOOM * unitW() / (W * FG.k));
+
+function applyZoom() {
+  const { w, h } = viewSize();
+  Z.s = Math.min(maxScale(), Math.max(1, Z.s));
+  Z.x = Math.min(0, Math.max(w - w * Z.s, Z.x));            // keep the image covering the viewport
+  Z.y = Math.min(0, Math.max(h - h * Z.s, Z.y));
+  const m = FG.m;
+  stage.style.transform = `translate(${Z.x}px, ${Z.y}px) scale(${Z.s}) matrix(${m.join(',')})`;
+  el('zlevel').textContent = Math.round(dataZoom() * 100) + '%';
+  canvas.classList.toggle('crisp', Z.s * FG.k > 2);          // overview upscaled: show its real pixels
+  syncDetail(); scheduleDetail(); updateMode();
+}
+function zoomAt(factor, cx, cy) {                           // cx, cy relative to the viewport
+  if (editing) return;
+  const old = Z.s; Z.s = Math.min(maxScale(), Math.max(1, old * factor));
+  const k = Z.s / old;
+  Z.x = cx - (cx - Z.x) * k; Z.y = cy - (cy - Z.y) * k;
+  applyZoom();
+}
+const centre = () => ({ x: view.clientWidth / 2, y: view.clientHeight / 2 });
+const localPoint = e => { const r = view.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+
+view.addEventListener('wheel', e => {
+  if (editing) return;
+  e.preventDefault();
+  const p = localPoint(e);
+  zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), p.x, p.y);   // ctrl = trackpad pinch
+}, { passive: false });
+
+const pointers = new Map(); let pinch = null;
+view.addEventListener('pointerdown', e => {
+  if (editing || e.target.closest('.zoombar')) return;
+  view.setPointerCapture(e.pointerId); pointers.set(e.pointerId, localPoint(e));
+  view.classList.add('dragging'); pinch = null;
+});
+view.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId), now = localPoint(e);
+  pointers.set(e.pointerId, now);
+  if (pointers.size === 1) { Z.x += now.x - prev.x; Z.y += now.y - prev.y; applyZoom(); }
+  else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y), m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (pinch) { Z.x += m.x - pinch.m.x; Z.y += m.y - pinch.m.y; zoomAt(d / pinch.d, m.x, m.y); }
+    pinch = { d, m };
+  }
+});
+const endPointer = e => { pointers.delete(e.pointerId); pinch = null; if (!pointers.size) view.classList.remove('dragging'); };
+view.addEventListener('pointerup', endPointer); view.addEventListener('pointercancel', endPointer);
+
+view.addEventListener('dblclick', e => {
+  if (editing || e.target.closest('.zoombar')) return;
+  const p = localPoint(e);
+  if (Z.s > 1.01) { Z.s = 1; Z.x = Z.y = 0; applyZoom(); } else zoomAt(4, p.x, p.y);
+});
+el('zin').addEventListener('click', () => zoomAt(1.5, centre().x, centre().y));
+el('zout').addEventListener('click', () => zoomAt(1 / 1.5, centre().x, centre().y));
+el('zfit').addEventListener('click', () => { Z.s = 1; Z.x = Z.y = 0; applyZoom(); });
+el('z1').addEventListener('click', () => zoomAt(unitW() / (W * FG.k) / Z.s, centre().x, centre().y));
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input, select')) return;
+  if (e.key === '+' || e.key === '=') zoomAt(1.5, centre().x, centre().y);
+  else if (e.key === '-') zoomAt(1 / 1.5, centre().x, centre().y);
+  else if (e.key === '0') el('zfit').click();
+  else if (e.key === 'Escape' && editing) endEdit(false);
+  else if (e.key === 'Enter' && editing) endEdit(true);
+});
+
+// ---- Crop editing ------------------------------------------------------------------
+function relayout(resetZoom) {
+  if (resetZoom) { Z.s = 1; Z.x = Z.y = 0; }
+  layoutFrame(); hideDetail(); applyZoom();
+}
+function startEdit() {
+  editing = true; cropBox = F.crop.slice(); view.classList.add('editing');
+  el('cropEdit').textContent = 'Done'; relayout(true);
+}
+function endEdit(apply) {
+  if (apply) F.crop = cropBox.slice();
+  editing = false; view.classList.remove('editing'); cropEl.style.display = 'none';
+  el('cropEdit').textContent = 'Edit crop'; relayout(true);
+}
+el('cropEdit').addEventListener('click', () => editing ? endEdit(true) : startEdit());
+
+function setCrop(c) { if (editing) { cropBox = c; placeCrop(); } else { F.crop = c; relayout(true); } }
+// Fit: the largest crop with no empty corners, in the chosen shape (the image's own shape if free).
+const fit = () => fitInside(W, H, F.rot, aspectOf() || origAspect());
+el('cropFit').addEventListener('click', () => setCrop(fit()));
+el('aspect').addEventListener('change', () => { if (aspectOf()) setCrop(fit()); });
+function setRot(deg) {
+  deg = ((deg + 180) % 360 + 360) % 360 - 180;                      // keep within -180..180
+  F.rot = deg; el('rot').value = deg - 90 * Math.round(deg / 90); el('rotV').textContent = deg.toFixed(1);   // slider = offset from the nearest quarter turn
+  F.crop = fit(); cropBox = F.crop.slice();                         // a new angle starts from the clean (no corners) crop
+  relayout(true);
+}
+el('rot').addEventListener('input', e => setRot(90 * Math.round(F.rot / 90) + (+e.target.value)));
+el('rotl').addEventListener('click', () => setRot(F.rot - 90));
+el('rotr').addEventListener('click', () => setRot(F.rot + 90));
+el('frameReset').addEventListener('click', () => {
+  editing = false; view.classList.remove('editing'); cropEl.style.display = 'none'; el('cropEdit').textContent = 'Edit crop';
+  el('aspect').value = 'orig'; F.rot = 0; F.crop = [0, 0, 1, 1]; el('rot').value = 0; el('rotV').textContent = '0.0'; relayout(true);
+});
+
+// Dragging the crop box (moves it) or one of its handles (resizes it).
+let drag = null;
+cropEl.addEventListener('pointerdown', e => {
+  e.stopPropagation(); cropEl.setPointerCapture(e.pointerId);
+  drag = { h: e.target.dataset.h || 'move', x: e.clientX, y: e.clientY, c: cropBox.slice() };
+});
+cropEl.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const { g, k } = FG, dx = (e.clientX - drag.x) / (k * g.Wb), dy = (e.clientY - drag.y) / (k * g.Hb);   // as fractions of the box
+  const MIN = 0.03, [l0, t0, r0, b0] = drag.c, a = aspectOf();
+  let [l, t, r, b] = drag.c;
+  if (drag.h === 'move') {
+    const w = r0 - l0, h = b0 - t0;
+    l = Math.min(1 - w, Math.max(0, l0 + dx)); t = Math.min(1 - h, Math.max(0, t0 + dy)); r = l + w; b = t + h;
+  } else if (a) {                                                  // locked shape: corners only, opposite corner stays put
+    const west = drag.h.includes('w'), north = drag.h.includes('n');
+    const ax = west ? r0 : l0, ay = north ? b0 : t0;                // the anchored corner
+    let w = Math.max(MIN, (west ? ax - (l0 + dx) : (r0 + dx) - ax));
+    const maxW = Math.min(west ? ax : 1 - ax, ((north ? ay : 1 - ay) * g.Hb) * a / g.Wb);   // stay inside the box
+    w = Math.min(w, maxW); const h = w * g.Wb / a / g.Hb;
+    l = west ? ax - w : ax; r = west ? ax : ax + w; t = north ? ay - h : ay; b = north ? ay : ay + h;
+  } else {
+    if (drag.h.includes('w')) l = Math.min(r0 - MIN, Math.max(0, l0 + dx));
+    if (drag.h.includes('e')) r = Math.max(l0 + MIN, Math.min(1, r0 + dx));
+    if (drag.h.includes('n')) t = Math.min(b0 - MIN, Math.max(0, t0 + dy));
+    if (drag.h.includes('s')) b = Math.max(t0 + MIN, Math.min(1, b0 + dy));
+  }
+  cropBox = [l, t, r, b]; placeCrop();
+});
+const endDrag = () => { drag = null; };
+cropEl.addEventListener('pointerup', endDrag); cropEl.addEventListener('pointercancel', endDrag);
+
+// ---- Full-resolution detail ----------------------------------------------------
+// Below DETAIL_MIN the block-averaged overview is the better image. Above it we draw the visible
+// part of the full-res tiles into a viewport-sized canvas. While you pan or zoom, the last detail
+// frame is moved with a CSS transform, then redrawn once things settle. Each screen pixel is mapped
+// back through the zoom and the frame (rotate + crop) to a full-res pixel.
+const DETAIL_MIN = 0.6;                                     // screen px per full-res px
+const dcanvas = el('detail'), dctx = dcanvas.getContext('2d');
+const grid = [];                                            // tile objects by ty*cols+tx
+const requested = new Set();
+let dZ = null, dTimer = null;                               // view state of the drawn detail frame
+
+const b64u16 = b64 => { const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Uint16Array(u8.buffer); };
+window.__tile = (ty, tx, tw, th, obj) => {
+  const c = {}; for (const k in obj) c[k] = b64u16(obj[k]);
+  grid[ty * T.cols + tx] = { w: tw, h: th, c }; scheduleDetail();
+};
+function requestTile(ty, tx) {
+  const key = ty * T.cols + tx;
+  if (requested.has(key)) return; requested.add(key);
+  const sc = document.createElement('script');
+  sc.src = `${T.dir}/t_${ty}_${tx}.js`;
+  sc.onerror = () => { tilesFailed = true; hideDetail(); applyZoom(); };   // e.g. the folder was not copied along
+  document.head.appendChild(sc);
+}
+function updateMode() {
+  const m = el('zmode');
+  if (!T) m.textContent = 'overview';
+  else if (tilesFailed) m.textContent = 'overview (no tiles)';
+  else if (editing || dataZoom() < DETAIL_MIN) m.textContent = 'overview';
+  else m.textContent = dZ ? 'full-res' : 'loading...';
+}
+function hideDetail() { dcanvas.style.display = 'none'; dZ = null; updateMode(); }
+function syncDetail() {
+  if (!dZ) return;
+  if (!haveDetail() || editing || dataZoom() < DETAIL_MIN) { hideDetail(); return; }
+  const k = Z.s / dZ.s;
+  dcanvas.style.transform = `translate(${Z.x - dZ.x * k}px, ${Z.y - dZ.y * k}px) scale(${k})`;
+}
+function scheduleDetail() { clearTimeout(dTimer); dTimer = setTimeout(renderDetail, 90); }
+
+function renderDetail() {
+  if (!haveDetail() || editing || dataZoom() < DETAIL_MIN) { hideDetail(); return; }
+  const vw = view.clientWidth, vh = view.clientHeight;
+  if (dcanvas.width !== vw || dcanvas.height !== vh) { dcanvas.width = vw; dcanvas.height = vh; }
+  const { g, k } = FG, sc = T.w / W;                        // k: screen px per overview px at fit; sc: full-res px per overview px
+  const to = (sx, sy) => {                                  // screen pixel -> full-res pixel
+    const [u, v] = viewToImage(W, H, F.rot, g, k, (sx - Z.x) / Z.s, (sy - Z.y) / Z.s);
+    return [u * sc, v * sc];
+  };
+  // request the tiles under the viewport (the bounding box of its four corners, mapped into the image)
+  const cs = [to(0, 0), to(vw, 0), to(0, vh), to(vw, vh)], sh = T.shift, clampI = (v, hi) => Math.min(hi, Math.max(0, v));
+  const fxs = cs.map(c => c[0]), fys = cs.map(c => c[1]);
+  const tx0 = clampI(Math.floor(Math.min(...fxs)) >> sh, T.cols - 1), tx1 = clampI(Math.floor(Math.max(...fxs)) >> sh, T.cols - 1);
+  const ty0 = clampI(Math.floor(Math.min(...fys)) >> sh, T.rows - 1), ty1 = clampI(Math.floor(Math.max(...fys)) >> sh, T.rows - 1);
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) requestTile(ty, tx);
+
+  const st = stretchState(readParams()), [c0, c1, c2] = st.cs;
+  const out = dctx.createImageData(vw, vh), d = out.data, mask = T.size - 1, inv = 1 / 65535;
+  const t = F.rot * Math.PI / 180, cc = Math.cos(t), ss = Math.sin(t);
+  let drawn = 0;
+  for (let y = 0; y < vh; y++) {
+    const vy = (y + 0.5 - Z.y) / Z.s;
+    for (let x = 0; x < vw; x++) {
+      const vx = (x + 0.5 - Z.x) / Z.s;
+      const rx = vx / k + g.x0 - g.Wb / 2, ry = vy / k + g.y0 - g.Hb / 2;     // inverse of the frame, inlined for speed
+      const u = rx * cc + ry * ss + W / 2, v = -rx * ss + ry * cc + H / 2;
+      const xx = Math.floor(u * sc), yy = Math.floor(v * sc);
+      if (xx < 0 || xx >= T.w || yy < 0 || yy >= T.h) continue;               // outside the image (rotated corners)
+      const tl = grid[(yy >> sh) * T.cols + (xx >> sh)]; if (!tl) continue;    // not loaded yet: overview shows through
+      const idx = (yy & mask) * tl.w + (xx & mask), o = (y * vw + x) * 4;
+      nebula(st, c0 ? tl.c[c0.name][idx] * inv : 0, c1 ? tl.c[c1.name][idx] * inv : 0, c2 ? tl.c[c2.name][idx] * inv : 0, tmpRGB);
+      if (CHROMA) {   // luminance from the full-res pixel, colour from the smoothed overview chroma
+        const oi = Math.min(H - 1, v | 0) * W + Math.min(W - 1, u | 0);
+        withChroma(0.299 * tmpRGB[0] + 0.587 * tmpRGB[1] + 0.114 * tmpRGB[2], CHROMA.cb[oi], CHROMA.cr[oi], tmpRGB);
+      }
+      finish(st, tmpRGB[0], tmpRGB[1], tmpRGB[2],
+        c0 ? tl.c[c0.name + '*'][idx] * inv : 0, c1 ? tl.c[c1.name + '*'][idx] * inv : 0, c2 ? tl.c[c2.name + '*'][idx] * inv : 0, d, o);
+      drawn++;
+    }
+  }
+  dctx.putImageData(out, 0, 0);
+  dcanvas.style.display = 'block'; dcanvas.style.transform = 'none';
+  dZ = { s: Z.s, x: Z.x, y: Z.y };
+  window.__detailDrawn = drawn; updateMode();
+}
+window.addEventListener('resize', () => { layoutFrame(); hideDetail(); applyZoom(); });
+layoutFrame();
+applyZoom();
+applyAuto();                                                 // detect the green-removal amount for this data
+render();                                                    // last: it uses everything declared above
+</script>
+</body>
+</html>
