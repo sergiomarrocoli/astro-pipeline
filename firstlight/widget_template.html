@@ -162,10 +162,10 @@ const NONE = -1;   // band left black
 el('info').textContent = P.info || '';
 
 // ---- Palette presets ----------------------------------------------------------------
-const ROLES = { h: 'H', ha: 'H', halpha: 'H', o: 'O', oiii: 'O', o3: 'O', s: 'S', sii: 'S', s2: 'S' };
+const ROLES = { h: 'H', ha: 'H', halpha: 'H', o: 'O', oiii: 'O', o3: 'O', s: 'S', sii: 'S', s2: 'S', r: 'R', red: 'R', g: 'G', green: 'G', b: 'B', blue: 'B' };
 const roleOf = n => ROLES[n.toLowerCase().replace(/[^a-z0-9]/g, '')];
 const byRole = {}; chans.forEach((c, i) => { const r = roleOf(c.name); if (r) byRole[r] = i; });
-const PRESET_DEFS = [['SHO', 'SHO'], ['HSO', 'HSO'], ['OHS', 'OHS'], ['HOO', 'HOO'], ['OHH', 'OHH'], ['HSS', 'HSS']];   // HSS: H red, S cyan (no O needed)
+const PRESET_DEFS = [['SHO', 'SHO'], ['HSO', 'HSO'], ['OHS', 'OHS'], ['HOO', 'HOO'], ['OHH', 'OHH'], ['HSS', 'HSS'], ['RGB', 'RGB']];   // HSS: H red, S cyan (no O needed)
 const presets = PRESET_DEFS.filter(([, spec]) => [...spec].every(r => r in byRole))
   .map(([name, spec]) => ({ name, bands: [...spec].map(r => byRole[r]) }));
 let assign = [0, 1, 2].map(i => Math.max(0, P.channels.findIndex(c => c.name === P.default[i])));

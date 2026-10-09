@@ -56,6 +56,11 @@ def test_preview_script_composite_channel_order():
     assert "savejpg preview_SHO 92" in s
 
 
+def test_preview_script_rgb_composite_follows_roles_not_name_order():
+    s = lines(preview_script(["B", "G", "R"], composite_channels({"B", "G", "R"})))
+    assert "rgbcomp linear_R linear_G linear_B -out=composite_RGB" in s
+
+
 def test_preview_script_without_palette_has_no_composite():
     assert "rgbcomp" not in preview_script(["H", "L"], None)
 
@@ -64,7 +69,9 @@ def test_composite_choice_and_filter_roles():
     assert composite_channels({"H", "O", "S"}) == ("SHO", ("S", "H", "O"))
     assert composite_channels({"H", "O"}) == ("HOO", ("H", "O", "O"))
     assert composite_channels({"H", "S"}) is None
+    assert composite_channels({"R", "G", "B"}) == ("RGB", ("R", "G", "B"))
     assert [role(n) for n in ("H", "Ha", "OIII", "SII", "L")] == ["H", "H", "O", "S", None]
+    assert [role(n) for n in ("R", "Red", "g", "Green", "B")] == ["R", "R", "G", "G", "B"]
 
 
 def test_slug_is_filesystem_safe():

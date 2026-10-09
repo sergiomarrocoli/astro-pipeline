@@ -12,7 +12,8 @@ from .siril import MIN_VERSION
 from .stack import slug, stamp
 
 ROLES = {"h": "H", "ha": "H", "halpha": "H", "o": "O", "oiii": "O", "o3": "O",
-         "s": "S", "sii": "S", "s2": "S"}
+         "s": "S", "sii": "S", "s2": "S",
+         "r": "R", "red": "R", "g": "G", "green": "G", "b": "B", "blue": "B"}
 
 
 def role(filter_name: str) -> Optional[str]:
@@ -20,11 +21,13 @@ def role(filter_name: str) -> Optional[str]:
 
 
 def composite_channels(roles: set[str]) -> Optional[tuple[str, tuple[str, str, str]]]:
-    """(palette name, (R, G, B) roles). SHO for three filters, HOO for H+O, else none."""
+    """(palette name, (R, G, B) roles). SHO for three filters, HOO for H+O, RGB for R+G+B, else none."""
     if {"S", "H", "O"} <= roles:
         return "SHO", ("S", "H", "O")
     if {"H", "O"} <= roles:
         return "HOO", ("H", "O", "O")
+    if {"R", "G", "B"} <= roles:
+        return "RGB", ("R", "G", "B")
     return None
 
 

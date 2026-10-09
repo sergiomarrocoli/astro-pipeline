@@ -36,6 +36,8 @@ def test_default_assignment_sho_hoo_and_fallback():
     assert default_assignment(["H", "O", "S"]) == ["S", "H", "O"]
     assert default_assignment(["Ha", "OIII"]) == ["Ha", "OIII", "OIII"]
     assert default_assignment(["H", "S"]) == ["H", "S", "S"]  # no O: an H/S bicolour, H red and S cyan
+    assert default_assignment(["B", "G", "R"]) == ["R", "G", "B"]  # broadband RGB: not alphabetical, which swaps red and blue
+    assert default_assignment(["Blue", "Green", "Red"]) == ["Red", "Green", "Blue"]
     assert default_assignment(["L", "R"]) == ["L", "R", "L"]  # unknown filters cycle in name order
 
 
