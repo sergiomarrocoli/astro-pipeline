@@ -3,7 +3,7 @@
 Process a night of astrophotography in one command: raw FITS frames in; aligned linear stacks, previews and a report out. A desktop app and an interactive widget help you tune colour and stretch afterwards.
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Raw FITS frames<br/>(NINA)"] --> B["Classify<br/>by header"]
     B --> C["Find hot pixels,<br/>match or build darks"]
     C --> D["Reject bad frames<br/>soft, elongated, few stars"]
