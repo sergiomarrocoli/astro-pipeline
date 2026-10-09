@@ -50,6 +50,13 @@ def test_any_mismatch_in_the_conditions_means_no_dark(tmp_path, change):
     assert m is None and "no dark for" in why and "the library has" in why
 
 
+def test_exposure_matches_within_half_a_second(tmp_path):
+    L = lib(tmp_path, entry(exp=18.0))
+    assert L.find_dark(light(exposure=18.08))[0] is not None       # 18.08 s light, 18 s dark
+    assert L.find_dark(light(exposure=18.5))[0] is not None
+    assert L.find_dark(light(exposure=18.6))[0] is None
+
+
 def test_temperature_must_be_close_but_not_identical(tmp_path):
     L = lib(tmp_path, entry(temp=-10.0))
     assert L.find_dark(light(temp=-9.4))[0] is not None            # within 1.5 C

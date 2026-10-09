@@ -50,7 +50,7 @@ A real night lives at `~/Documents/N.I.N.A/2026-10-03/` (NGC 7000 and NGC 7635; 
 
 ## Dark library (`calibration.py`)
 - Masters live in `~/.firstlight/library` (override with `--library` or `$FIRSTLIGHT_LIBRARY`), indexed by `index.json`. Darks found in a night folder are grouped by instrument/binning/gain/offset/exposure, then clustered by sensor temperature, and built with `stack dark rej w 3 3 -nonorm`; unchanged source frames are not rebuilt.
-- A master matches lights on the first five exactly and on temperature within `dark_temp_tolerance` (1.5 C). With a match, `stack_filter` calibrates with `-dark= -cc=dark` and skips the hot-pixel list; without one it says why and falls back to the list. `--no-darks` disables both. Flats stay optional and unimplemented.
+- A master matches lights on instrument, binning, gain and offset exactly, on exposure within 0.5 s (`EXPOSURE_TOLERANCE`; SharpCap's 18.08 s lights against 18 s darks), and on temperature within `dark_temp_tolerance` (1.5 C). With a match, `stack_filter` calibrates with `-dark= -cc=dark` and skips the hot-pixel list; without one it says why and falls back to the list. `--no-darks` disables both. Flats stay optional and unimplemented.
 - `firstlight-library list|add <folder>|check <folder>` manages it. Missing header values (e.g. no XBINNING) count as compatible.
 
 ## Desktop app (`app.py`, `app_ui.html`, `packaging/`)

@@ -1,6 +1,6 @@
 """A library of master calibration frames, kept across nights and keyed by what makes them match.
 
-A dark must match the light's camera, binning, gain, offset and exposure exactly, and its sensor temperature
+A dark must match the light's camera, binning, gain and offset exactly, its exposure within 0.5 s, and its sensor temperature
 closely: dark current doubles every few degrees. It does not care about filter, target or night, so one
 library serves every session until the settings or the camera change. Masters are built with Siril from raw
 dark frames (found by IMAGETYP) and cached; building is skipped when the same source frames are already in.
@@ -29,7 +29,7 @@ DEFAULT_LIBRARY = Path.home() / ".firstlight" / "library"
 DEFAULT_TEMP_TOLERANCE = 1.5   # degrees C between a master dark and the lights it is applied to
 MIN_FRAMES = 3                  # fewer than this and a master would mostly add noise
 GOOD_FRAMES = 10                # below this a master is built, with a warning
-EXPOSURE_TOLERANCE = 0.01       # seconds
+EXPOSURE_TOLERANCE = 0.5        # seconds: an 18.08 s light takes an 18 s dark
 
 
 def library_path(explicit: Optional[str | Path] = None) -> Path:
