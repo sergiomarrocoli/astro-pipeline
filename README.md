@@ -1,6 +1,26 @@
 # firstlight
 
-One command turns a night's astrophotography frames into previews, clean linear stacks and an HTML report.
+Process a night of astrophotography in one command: raw FITS frames in; aligned linear stacks, previews and a report out. A desktop app and an interactive widget help you tune colour and stretch afterwards.
+
+```mermaid
+flowchart LR
+    A["Raw FITS frames<br/>(NINA)"] --> B["Classify<br/>by header"]
+    B --> C["Find hot pixels,<br/>match or build darks"]
+    C --> D["Reject bad frames<br/>soft, elongated, few stars"]
+    D --> E["Calibrate, register<br/>and stack, per filter"]
+    E --> F["Align filters<br/>and crop"]
+    F --> G["Remove sky<br/>gradient"]
+    G --> I["Linear stacks"]
+    G --> H["Split stars, deconvolve,<br/>denoise"]
+    H --> L["Widget"]
+    G --> J["Previews and<br/>SHO / HOO composite"]
+    H -.->|"only with --deconvolve,<br/>--denoise, --remove-stars"| J
+    J --> K["Report"]
+```
+
+![The preview widget showing Andromeda (M31) from 149 frames of 18 s each in R, G and B](docs/widget-andromeda.jpg)
+
+*The preview widget, with Andromeda stacked from three filters of 18 s frames. Palette, stretch, colour and framing are live controls on layers that were already processed at full resolution.*
 
 ![One 18 s H-alpha frame of the Heart Nebula (left) and the SHO preview firstlight made from 100 + 101 + 100 such frames (right)](docs/heart-before-after.jpg)
 
