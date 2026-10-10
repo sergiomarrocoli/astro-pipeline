@@ -50,7 +50,7 @@ The pipeline reads **NINA output only** (one FITS per frame, headers written by 
 
 ## Samples (`samples/`)
 
-One linear stack per filter, from the 2025-02-28 SharpCap night: `ic1805/stack_{H,O,S}.fits` (Heart Nebula, 100 x 18 s each) and `m31/stack_{R,G,B}.fits` (Andromeda, about 50 x 18 s each, stacked with the 18 s master dark). Tile-compressed (RICE_1, 16-bit quantisation: error is 0.007 of the sky noise), about 7.5 MB each; astropy and Siril both read them. They are stacks, so they start the pipeline at align/finish, not at classify. Made by `firstlight` from the unpacked frames (`utils/unpack_sharpcap.py`); the raw frames are not in the repo. The stacks are gitignored (`samples/**/*.fits`; the folder is kept with a `.gitkeep`), so they exist only on the machine that made them; for now regenerate them or copy them over.
+One linear stack per filter, from the 2025-02-28 SharpCap night: `ic1805/stack_{H,O,S}.fits` (Heart Nebula, 100 x 18 s each) and `m31/stack_{R,G,B}.fits` (Andromeda, about 50 x 18 s each, stacked with the 18 s master dark). Tile-compressed (RICE_1, 16-bit quantisation: error is 0.007 of the sky noise), about 7.5 MB each; astropy and Siril both read them. They are stacks, so they start the pipeline at align/finish, not at classify. Made by `firstlight` from the unpacked frames (`utils/unpack_sharpcap.py`); the raw frames are not in the repo. They are committed (44 MB in total, so avoid replacing them often: every version stays in git history).
 
 ## Test data
 

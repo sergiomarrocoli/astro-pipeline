@@ -7,4 +7,3 @@ examples/*.html
 build/
 dist/
 *.spec
-samples/**/*.fits
