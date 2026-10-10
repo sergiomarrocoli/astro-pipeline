@@ -22,10 +22,6 @@ flowchart TD
 
 *The preview widget, with Andromeda stacked from three filters of 18 s frames. Palette, stretch, colour and framing are live controls on layers that were already processed at full resolution.*
 
-![One 18 s H-alpha frame of the Heart Nebula (left) and the SHO preview firstlight made from 100 + 101 + 100 such frames (right)](docs/heart-before-after.jpg)
-
-*Left: a single 18 s H-alpha sub of the Heart Nebula (IC 1805), stretched. Right: the SHO preview from 301 frames, produced by one command.*
-
 ```
 firstlight ~/astro/2026-10-03 -o ~/astro/2026-10-03-out
 ```
