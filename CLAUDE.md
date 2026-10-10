@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`PLAN.md` is the original brief (firstlight: one command turns a night's FITS frames into previews, linear stacks and an HTML report). Not yet built: GraXpert, plate solving, flats.
+`docs/PLAN.md` is the original brief (firstlight: one command turns a night's FITS frames into previews, linear stacks and an HTML report). Not yet built: GraXpert, plate solving, flats.
 
 ## Commands
 

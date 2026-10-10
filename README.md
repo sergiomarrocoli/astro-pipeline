@@ -33,9 +33,11 @@ firstlight ~/astro/2026-10-03 -o ~/astro/2026-10-03-out
 firstlight reads the FITS frames, sorts them by header (not by folder name), calibrates, registers and stacks each target and filter with [Siril](https://siril.org), aligns the filters to each other, and writes:
 
 - **Linear stacks**, one 32-bit FITS per filter, aligned and cropped to a common area with the sky gradient removed. This is the real output, ready for finishing in Siril.
-- **Previews**: auto-stretched JPGs per filter and an SHO (three filters) or HOO (H + O) composite. These are throwaway; judge the night with them.
-- **A report** (`report.html`; [see an example for the Heart Nebula](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html), or [the file](docs/report-ic1805.html)): a raw sub next to the result, frames used and rejected, integration per filter, star size, frame-quality charts and a sensor-tilt check.
+- **Previews**: auto-stretched JPGs per filter and an SHO (three filters), HOO (H + O) or RGB composite. These are throwaway; judge the night with them.
+- **A report** (`report.html`, [example for the Heart Nebula](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html), [file](docs/report-ic1805.html)): a raw sub next to the result, frames used and rejected, integration per filter, star size, frame-quality charts and a sensor-tilt check.
 - **A widget** (`preview/widget.html`): a self-contained page for playing with palette, stretch, colour and framing on the processed layers, with full-resolution tiles on zoom. It needs no server; open it next to its `widget_tiles/` folder.
+
+[![The top of a firstlight report for the Heart Nebula: a raw sub next to the draft, and the per-filter data](docs/report-ic1805.jpg)](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html)
 
 Colour balance and the final stretch are left to you; the tool stops where taste starts.
 
@@ -77,7 +79,7 @@ firstlight <night-folder> -o <out> [--target NGC] [--filter H] [--dry-run] [--ke
 
 Built: classification, dark library, hot pixels, frame rejection, stacking, cross-filter alignment, background removal, previews, report, widget, desktop app. Not built yet: GraXpert, plate solving, flats. Developed against an SVBONY SV605 mono with H, O and S filters.
 
-`PLAN.md` is the original brief; `CLAUDE.md` describes the architecture and what was learned on real data.
+[`docs/PLAN.md`](docs/PLAN.md) is the original brief; `CLAUDE.md` describes the architecture and what was learned on real data.
 
 ## Tests
 
