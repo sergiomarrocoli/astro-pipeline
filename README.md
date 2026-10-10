@@ -71,6 +71,10 @@ firstlight <night-folder> -o <out> [--target NGC] [--filter H] [--dry-run] [--ke
 
 `utils/unpack_sharpcap.py` converts old SharpCap captures (Siril FITSEQ files) into NINA-style frames, for test data.
 
+## Sample data
+
+[`samples/`](samples) holds one linear stack per filter from a single night (2025-02-28, SharpCap, 18 s subs): the Heart Nebula (`ic1805/stack_{H,O,S}.fits`, 100 frames each) and Andromeda (`m31/stack_{R,G,B}.fits`, about 50 frames each, calibrated with a master dark). They are tile-compressed (RICE_1) 32-bit FITS files of about 7.5 MB, readable by astropy and Siril. They are stacks, so they stand in for the output of the stacking stage; the raw frames are not in the repo. The images in this README were made from them.
+
 ## Status
 
 Built: classification, dark library, hot pixels, frame rejection, stacking, cross-filter alignment, background removal, previews, report, widget, desktop app. Not built yet: GraXpert, plate solving, flats. Developed against an SVBONY SV605 mono with H, O and S filters.
