@@ -37,7 +37,7 @@ firstlight reads the FITS frames, sorts them by header (not by folder name), cal
 - **A report** (`report.html`, [example for the Heart Nebula](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html), [file](docs/report-ic1805.html)): a raw sub next to the result, frames used and rejected, integration per filter, star size, frame-quality charts and a sensor-tilt check.
 - **A widget** (`preview/widget.html`): a self-contained page for playing with palette, stretch, colour and framing on the processed layers, with full-resolution tiles on zoom. It needs no server; open it next to its `widget_tiles/` folder.
 
-[![The top of a firstlight report for the Heart Nebula: a raw sub next to the draft, and the per-filter data](docs/report-ic1805.jpg)](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html)
+[![A firstlight report for the Heart Nebula: a raw sub next to the draft, the per-filter data, frame-quality charts, star size across the field and what the pipeline did](docs/report-ic1805.jpg)](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html)
 
 Colour balance and the final stretch are left to you; the tool stops where taste starts.
 
