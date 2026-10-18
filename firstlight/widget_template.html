@@ -59,6 +59,12 @@
   .view.editing { cursor:default; }
   .two { display:grid; grid-template-columns:1fr 1fr; gap:6px; } .two button { margin-top:6px; }
   .note { color:var(--dim); font-size:11px; margin-top:10px; } .hide { display:none; }
+  .tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:8px; }
+  .tabs button { margin:0; padding:4px 0; } .tabs button.on { border-color:var(--accent); color:var(--accent); }
+  #curve { width:100%; aspect-ratio:1; display:block; margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:6px;
+           touch-action:none; cursor:crosshair; outline:none; }
+  #curve:focus-visible { border-color:var(--accent); }
+  .readout { display:flex; justify-content:space-between; color:var(--dim); font-size:11px; font-variant-numeric:tabular-nums; margin-top:4px; }
   #ms { color:var(--dim); font-size:11px; float:right; font-weight:400; }
 </style>
 </head>
@@ -121,6 +127,16 @@
       <input type="range" id="sk" min="0" max="3.7" step="0.05" value="1.5">
       <label>Star colour <span id="scolV"></span></label>
       <input type="range" id="scol" min="0" max="1.5" step="0.05" value="0.5">
+    </details>
+
+    <details open><summary>Curves</summary>
+      <div class="tabs" id="ctabs"><button type="button" data-ch="m" class="on">RGB</button><button type="button" data-ch="r">R</button><button type="button" data-ch="g">G</button><button type="button" data-ch="b">B</button></div>
+      <canvas id="curve" width="256" height="256" tabindex="0"></canvas>
+      <div class="readout"><span id="cin">Input</span><span id="cout">Output</span></div>
+      <div class="two"><select id="cpreset" style="margin-top:6px" title="Preset for the selected channel"><option value="">Preset&hellip;</option><option value="linear">Linear</option>
+        <option value="contrast+">Contrast +</option><option value="contrast-">Contrast &minus;</option><option value="lighten">Lighten shadows</option><option value="darken">Darken</option></select>
+        <button id="creset" type="button">Reset curve</button></div>
+      <div class="note" style="margin-top:6px">Applied last, to the finished picture. Click to add a point, drag to move it, double-click (or Delete) to remove it.</div>
     </details>
 
     <details open><summary>Frame</summary>
@@ -247,8 +263,17 @@ function finish(st, r, gr, b, s0, s1, s2, d, o) {
     gr = screen(gr, Math.max(0, (l + w * (a1 - l)) * q.sbr));
     b = screen(b, Math.max(0, (l + w * (a2 - l)) * q.sbr));
   }
+  PRE[0] = r; PRE[1] = gr; PRE[2] = b;                                            // before the curves, for the curve's histogram
+  if (CL.on) {
+    if (CL.m) { r = curveAt(CL.m, r); gr = curveAt(CL.m, gr); b = curveAt(CL.m, b); }
+    if (CL.r) r = curveAt(CL.r, r);
+    if (CL.g) gr = curveAt(CL.g, gr);
+    if (CL.b) b = curveAt(CL.b, b);
+  }
   d[o] = r * 255; d[o + 1] = gr * 255; d[o + 2] = b * 255; d[o + 3] = 255;        // Uint8ClampedArray clamps
 }
+const PRE = [0, 0, 0];
+const CL = { on: false, m: null, r: null, g: null, b: null };                      // the curves' lookup tables (null = identity)
 const tmpRGB = [0, 0, 0];
 let CHROMA = null;     // smoothed overview chroma {cb, cr}, kept so the detail view can pair it with full-res luminance
 
@@ -270,23 +295,32 @@ function applyAuto() {
 }
 
 const NR = new Float32Array(N), NG = new Float32Array(N), NB = new Float32Array(N);
-function render() {
-  const t0 = performance.now(), q = readParams(), st = stretchState(q), d = img.data;
+let nebulaCached = false;
+// fast: only the curves changed, so the stretched nebula colour (NR, NG, NB) and the chroma are still valid
+function render(fast) {
+  const t0 = performance.now(), q = readParams(), st = stretchState(q), d = img.data, reuse = fast && nebulaCached;
   const [c0, c1, c2] = st.cs;
   const a = c0 ? c0.v : null, b = c1 ? c1.v : null, c = c2 ? c2.v : null;
   const sa = c0 ? c0.sv : null, sb = c1 ? c1.sv : null, sc_ = c2 ? c2.sv : null;
-  for (let i = 0; i < N; i++) {
-    nebula(st, a ? a[i] : 0, b ? b[i] : 0, c ? c[i] : 0, tmpRGB);
-    NR[i] = tmpRGB[0]; NG[i] = tmpRGB[1]; NB[i] = tmpRGB[2];
+  if (!reuse) {
+    for (let i = 0; i < N; i++) {
+      nebula(st, a ? a[i] : 0, b ? b[i] : 0, c ? c[i] : 0, tmpRGB);
+      NR[i] = tmpRGB[0]; NG[i] = tmpRGB[1]; NB[i] = tmpRGB[2];
+    }
+    CHROMA = q.csm > 0 ? chromaSmooth(NR, NG, NB, W, H, q.csm) : null;     // colour noise is blurred, detail is not
+    nebulaCached = true;
   }
-  CHROMA = q.csm > 0 ? chromaSmooth(NR, NG, NB, W, H, q.csm) : null;     // colour noise is blurred, detail is not
   const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  const pre = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
   for (let i = 0, o = 0; i < N; i++, o += 4) {
     finish(st, NR[i], NG[i], NB[i], sa ? sa[i] : 0, sb ? sb[i] : 0, sc_ ? sc_[i] : 0, d, o);
-    if ((i & 3) === 0) { hist[0][d[o]]++; hist[1][d[o + 1]]++; hist[2][d[o + 2]]++; }
+    if ((i & 3) === 0) {
+      hist[0][d[o]]++; hist[1][d[o + 1]]++; hist[2][d[o + 2]]++;
+      pre[0][(PRE[0] * 255 + 0.5) | 0]++; pre[1][(PRE[1] * 255 + 0.5) | 0]++; pre[2][(PRE[2] * 255 + 0.5) | 0]++;
+    }
   }
   ctx.putImageData(img, 0, 0);
-  drawHist(hist);
+  drawHist(hist); preHist = pre; drawCurve();
   el('ms').textContent = Math.round(performance.now() - t0) + ' ms';
   scheduleDetail();
 }
@@ -303,6 +337,7 @@ function drawHist(hist) {
   c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
 }
 
+let preHist = null;       // histogram of the picture before the curves, drawn behind the curve
 let pending = false;
 // auto = the palette or data changed, so re-detect the green-removal amount first
 const schedule = auto => { el('ms').textContent = '\u2026'; if (!pending) { pending = true; requestAnimationFrame(() => setTimeout(() => {
@@ -327,7 +362,7 @@ el('reset').addEventListener('click', () => {
     else if (e.tagName === 'SELECT') e.selectedIndex = Math.max(0, [...e.options].findIndex(o => o.defaultSelected));
     else e.value = e.defaultValue; });
   assign = [0, 1, 2].map(i => Math.max(0, P.channels.findIndex(c => c.name === P.default[i])));
-  drawBands(); schedule(true);
+  resetCurves(); drawBands(); schedule(true);
 });
 el('shuffle').addEventListener('click', () => {
   const n = chans.length;
@@ -336,6 +371,101 @@ el('shuffle').addEventListener('click', () => {
   drawBands(); schedule(true);
 });
 drawBands();
+
+// ---- Curves: tone curves on the finished picture, like Photoshop's ------------------------------------------
+// One master (RGB) curve and one per channel. Control points are [x, y] in [0,1]; the master is applied first.
+const identityCurve = () => [[0, 0], [1, 1]];
+const curves = { m: identityCurve(), r: identityCurve(), g: identityCurve(), b: identityCurve() };
+const CURVE_PRESETS = { linear: identityCurve(), 'contrast+': [[0, 0], [0.25, 0.19], [0.75, 0.81], [1, 1]], 'contrast-': [[0, 0], [0.25, 0.31], [0.75, 0.69], [1, 1]],
+  lighten: [[0, 0], [0.2, 0.32], [0.6, 0.72], [1, 1]], darken: [[0, 0], [0.4, 0.3], [0.8, 0.72], [1, 1]] };
+const CURVE_COLOUR = { m: '#cfd2d8', r: '#ff6b6b', g: '#5fd38a', b: '#6aa9ff' };
+const cv = el('curve'), cctx = cv.getContext('2d'), CP = 10, CS = 256 - 2 * CP, MIN_GAP = 0.005;
+let curCh = 'm', selPt = -1, dragging = false, hoverX = null;
+const toCv = (x, y) => [CP + x * CS, CP + (1 - y) * CS];
+
+function rebuildCurves() {
+  CL.on = false;
+  for (const k in curves) { CL[k] = curveIsIdentity(curves[k]) ? null : curveLUT(curves[k]); CL.on = CL.on || !!CL[k]; }
+}
+let cPending = false;
+const scheduleCurves = () => { rebuildCurves(); drawCurve(); if (!cPending) { cPending = true; requestAnimationFrame(() => { cPending = false; render(true); }); } };
+
+function drawCurve() {
+  const css = getComputedStyle(document.documentElement), line = css.getPropertyValue('--line').trim(), dim = css.getPropertyValue('--dim').trim();
+  cctx.clearRect(0, 0, 256, 256);
+  if (preHist) {                                                   // where the picture's values sit, before the curves
+    const hs = curCh === 'm' ? [0, 1, 2] : [{ r: 0, g: 1, b: 2 }[curCh]], peak = Math.max(1, ...hs.map(k => Math.max(...preHist[k].slice(1, 255))));
+    cctx.fillStyle = dim; cctx.globalAlpha = 0.28;
+    for (let x = 0; x < 256; x++) {
+      const v = Math.sqrt(Math.min(1, Math.max(...hs.map(k => preHist[k][x])) / peak)) * CS, px = CP + x / 255 * CS;
+      cctx.fillRect(px, CP + CS - v, Math.max(1, CS / 255), v);
+    }
+    cctx.globalAlpha = 1;
+  }
+  cctx.strokeStyle = line; cctx.lineWidth = 1; cctx.beginPath();
+  for (let i = 0; i <= 4; i++) { const [gx, gy] = toCv(i / 4, i / 4); cctx.moveTo(gx, CP); cctx.lineTo(gx, CP + CS); cctx.moveTo(CP, gy); cctx.lineTo(CP + CS, gy); }
+  cctx.stroke();
+  cctx.setLineDash([3, 4]); cctx.beginPath(); cctx.moveTo(...toCv(0, 0)); cctx.lineTo(...toCv(1, 1)); cctx.stroke(); cctx.setLineDash([]);
+  const lut = curveLUT(curves[curCh], 255);
+  cctx.strokeStyle = CURVE_COLOUR[curCh]; cctx.lineWidth = 2; cctx.beginPath();
+  for (let i = 0; i <= 255; i++) { const [x, y] = toCv(i / 255, lut[i]); i ? cctx.lineTo(x, y) : cctx.moveTo(x, y); }
+  cctx.stroke();
+  curves[curCh].forEach(([x, y], k) => {
+    const [px, py] = toCv(x, y); cctx.beginPath(); cctx.arc(px, py, k === selPt ? 5.5 : 4, 0, 7);
+    cctx.fillStyle = k === selPt ? CURVE_COLOUR[curCh] : '#111'; cctx.fill(); cctx.lineWidth = 1.5; cctx.strokeStyle = CURVE_COLOUR[curCh]; cctx.stroke();
+  });
+  document.querySelectorAll('#ctabs button').forEach(b => b.classList.toggle('on', b.dataset.ch === curCh));
+  const pt = selPt >= 0 ? curves[curCh][selPt] : hoverX === null ? null : [hoverX, curveAt(lut, hoverX)];
+  el('cin').textContent = pt ? 'Input ' + Math.round(pt[0] * 255) : 'Input';
+  el('cout').textContent = pt ? 'Output ' + Math.round(pt[1] * 255) : 'Output';
+}
+const cvPos = e => { const r = cv.getBoundingClientRect(), k = 256 / r.width;
+  return [((e.clientX - r.left) * k - CP) / CS, 1 - ((e.clientY - r.top) * k - CP) / CS]; };
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+function pointAt(x, y) {                                           // nearest control point within ~10 screen px, else -1
+  const r = cv.getBoundingClientRect(), tol = 10 / r.width * 256 / CS;
+  let best = -1, bd = tol;
+  curves[curCh].forEach(([px, py], k) => { const dd = Math.hypot(px - x, py - y); if (dd < bd) { bd = dd; best = k; } });
+  return best;
+}
+function movePoint(k, x, y) {
+  const pts = curves[curCh], lo = k > 0 ? pts[k - 1][0] + MIN_GAP : 0, hi = k < pts.length - 1 ? pts[k + 1][0] - MIN_GAP : 1;
+  pts[k] = [Math.min(hi, Math.max(lo, clamp01(x))), clamp01(y)];
+}
+function removePoint(k) {
+  if (k <= 0 || k >= curves[curCh].length - 1) return;             // the two end points stay
+  curves[curCh].splice(k, 1); selPt = -1; scheduleCurves();
+}
+cv.addEventListener('pointerdown', e => {
+  const [x, y] = cvPos(e); cv.focus(); let k = pointAt(x, y);
+  if (k < 0) {                                                     // click on empty space: add a point there
+    const pts = curves[curCh], i = pts.findIndex(p => p[0] > x);
+    if (x < 0 || x > 1 || i === 0 || (i > 0 && (x - pts[i - 1][0] < MIN_GAP || pts[i][0] - x < MIN_GAP))) { selPt = -1; drawCurve(); return; }
+    k = i < 0 ? pts.length : i; pts.splice(k, 0, [clamp01(x), clamp01(y)]);
+  }
+  selPt = k; dragging = true; cv.setPointerCapture(e.pointerId); scheduleCurves();
+});
+cv.addEventListener('pointermove', e => {
+  const [x, y] = cvPos(e);
+  if (dragging && selPt >= 0) { movePoint(selPt, x, y); scheduleCurves(); }
+  else { hoverX = x >= 0 && x <= 1 ? x : null; cv.style.cursor = pointAt(x, y) >= 0 ? 'grab' : 'crosshair'; drawCurve(); }
+});
+cv.addEventListener('pointerup', () => { dragging = false; });
+cv.addEventListener('pointerleave', () => { hoverX = null; if (!dragging) drawCurve(); });
+cv.addEventListener('dblclick', e => { const [x, y] = cvPos(e), k = pointAt(x, y); if (k >= 0) removePoint(k); });
+cv.addEventListener('keydown', e => {
+  if (selPt < 0) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { removePoint(selPt); e.preventDefault(); return; }
+  const d = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+  if (d) { const [x, y] = curves[curCh][selPt]; movePoint(selPt, x + d[0] / 255, y + d[1] / 255); scheduleCurves(); e.preventDefault(); }
+});
+document.querySelectorAll('#ctabs button').forEach(b => b.addEventListener('click', () => { curCh = b.dataset.ch; selPt = -1; drawCurve(); }));
+el('creset').addEventListener('click', () => { curves[curCh] = identityCurve(); selPt = -1; scheduleCurves(); });
+el('cpreset').addEventListener('change', e => {
+  if (CURVE_PRESETS[e.target.value]) { curves[curCh] = CURVE_PRESETS[e.target.value].map(p => p.slice()); selPt = -1; scheduleCurves(); }
+  e.target.selectedIndex = 0;
+});
+function resetCurves() { for (const k in curves) curves[k] = identityCurve(); curCh = 'm'; selPt = -1; rebuildCurves(); drawCurve(); }
 
 // ---- Frame: rotate and crop, live on the processed layers --------------------------
 // F is the applied frame: rotation in degrees (clockwise) and a crop as fractions of the rotated image's

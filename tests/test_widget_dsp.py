@@ -150,3 +150,28 @@ def test_view_to_image_inverts_the_frame_matrix(page):
       return worst;
     }""")
     assert r < 1e-9
+
+
+def test_curve_through_its_control_points_and_flat_beyond_them(page):
+    r = page.evaluate("""() => {
+      const pts = [[0.1, 0.2], [0.5, 0.7], [0.9, 0.8]], lut = curveLUT(pts);
+      return { at: pts.map(([x]) => curveAt(lut, x)), before: curveAt(lut, 0), after: curveAt(lut, 1) };
+    }""")
+    assert all(abs(a - b) < 2e-3 for a, b in zip(r["at"], [0.2, 0.7, 0.8]))
+    assert r["before"] == pytest.approx(0.2) and r["after"] == pytest.approx(0.8)
+
+
+def test_curve_never_overshoots_between_rising_points(page):
+    r = page.evaluate("""() => {
+      const lut = curveLUT([[0, 0], [0.3, 0.05], [0.4, 0.9], [1, 1]]);   // a steep step: a plain spline would ring
+      let mono = true, lo = 1, hi = 0;
+      for (let i = 1; i < lut.length; i++) { if (lut[i] < lut[i - 1] - 1e-7) mono = false; lo = Math.min(lo, lut[i]); hi = Math.max(hi, lut[i]); }
+      return { mono, lo, hi };
+    }""")
+    assert r["mono"] and r["lo"] >= 0 and r["hi"] <= 1
+
+
+def test_the_identity_curve_is_the_identity(page):
+    r = page.evaluate("""() => { const lut = curveLUT([[0, 0], [1, 1]]);
+      return { worst: Math.max(...[0, 0.123, 0.5, 0.987, 1].map(x => Math.abs(curveAt(lut, x) - x))), id: curveIsIdentity([[0, 0], [1, 1]]), not: curveIsIdentity([[0, 0], [0.5, 0.6], [1, 1]]) }; }""")
+    assert r["worst"] < 1e-6 and r["id"] and not r["not"]

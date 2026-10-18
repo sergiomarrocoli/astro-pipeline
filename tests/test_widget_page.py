@@ -108,3 +108,67 @@ def test_export_is_the_framed_size(page):
         page.click("#save")
     assert list(Image.open(dl.value.path()).size) == expected
     assert page.errors == []
+
+
+# ---- curves ----
+
+def curve_xy(pg, x, y):
+    """Page coordinates of a point on the curve canvas, given curve coordinates in [0,1]."""
+    pg.locator("#curve").scroll_into_view_if_needed()
+    box = pg.eval_on_selector("#curve", "e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width]; }")
+    k = box[2] / 256
+    return box[0] + (10 + x * 236) * k, box[1] + (10 + (1 - y) * 236) * k
+
+
+def mean_green(pg):
+    return pg.evaluate("() => { const d = img.data; let s = 0; for (let i = 1; i < d.length; i += 4) s += d[i]; return s / (d.length / 4); }")
+
+
+def test_curves_start_as_the_identity_and_change_nothing(page):
+    page.click("#reset")
+    assert page.evaluate("() => CL.on") is False
+    assert page.evaluate("() => curves.m.length") == 2
+
+
+def test_dragging_a_point_changes_the_picture_and_reset_undoes_it(page):
+    page.click("#reset")
+    page.locator("#curve").scroll_into_view_if_needed()
+    before = mean_green(page)
+    x, y = curve_xy(page, 0.5, 0.5)
+    tx, ty = curve_xy(page, 0.5, 0.8)
+    page.mouse.move(x, y); page.mouse.down(); page.mouse.move(tx, ty, steps=4); page.mouse.up()
+    page.wait_for_function("() => CL.on")
+    pts = page.evaluate("() => curves.m")
+    assert len(pts) == 3 and abs(pts[1][0] - 0.5) < 0.03 and abs(pts[1][1] - 0.8) < 0.03
+    page.wait_for_timeout(200)
+    assert mean_green(page) > before + 5               # lifting the midtones brightens the picture
+    page.click("#creset")
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => CL.on") is False and abs(mean_green(page) - before) < 0.5
+
+
+def test_a_channel_curve_only_touches_that_channel(page):
+    page.click("#reset")
+    page.click("#ctabs button[data-ch=r]")
+    x, y = curve_xy(page, 0.5, 0.5)
+    tx, ty = curve_xy(page, 0.5, 0.2)
+    g0 = mean_green(page)
+    page.mouse.move(x, y); page.mouse.down(); page.mouse.move(tx, ty, steps=4); page.mouse.up()
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => !!CL.r && !CL.g && !CL.b && !CL.m")
+    assert abs(mean_green(page) - g0) < 0.5
+    page.click("#reset")
+
+
+def test_double_click_removes_a_point_but_never_an_end_point(page):
+    page.click("#reset")
+    x, y = curve_xy(page, 0.4, 0.6)
+    page.mouse.click(x, y)                                  # adds a point
+    assert page.evaluate("() => curves.m.length") == 3
+    page.mouse.dblclick(x, y)
+    assert page.evaluate("() => curves.m.length") == 2
+    ex, ey = curve_xy(page, 0, 0)
+    page.mouse.dblclick(ex, ey)
+    assert page.evaluate("() => curves.m.length") == 2
+    page.click("#reset")
+    assert page.errors == []

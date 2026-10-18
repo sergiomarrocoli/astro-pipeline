@@ -31,7 +31,7 @@ firstlight reads the FITS frames, sorts them by header (not by folder name), cal
 - **Linear stacks**, one 32-bit FITS per filter, aligned and cropped to a common area with the sky gradient removed. This is the real output, ready for finishing in Siril.
 - **Previews**: auto-stretched JPGs per filter and an SHO (three filters), HOO (H + O) or RGB composite. These are throwaway; judge the night with them.
 - **A report** (`report.html`, [example for the Heart Nebula](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html), [file](docs/report-ic1805.html)): a raw sub next to the result, frames used and rejected, integration per filter, star size, frame-quality charts and a sensor-tilt check.
-- **A widget** (`preview/widget.html`): a self-contained page for playing with palette, stretch, colour and framing on the processed layers, with full-resolution tiles on zoom. It needs no server; open it next to its `widget_tiles/` folder.
+- **A widget** (`preview/widget.html`): a self-contained page for playing with palette, stretch, colour, curves and framing on the processed layers, with full-resolution tiles on zoom. It needs no server; open it next to its `widget_tiles/` folder.
 
 [![A firstlight report for the Heart Nebula: a raw sub next to the draft, the per-filter data, frame-quality charts, star size across the field and what the pipeline did](docs/report-ic1805.jpg)](https://htmlpreview.github.io/?https://github.com/sergiomarrocoli/astro-pipeline/blob/main/docs/report-ic1805.html)
 
