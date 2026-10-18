@@ -126,3 +126,13 @@ def test_black_point_uses_the_plain_stack_noise_when_given():
     plain = build_payload(layers)["channels"][0]
     with_noise = build_payload(layers, noise={"H": 3.0, "O": 3.0})["channels"][0]
     assert with_noise["sigma"] == 3.0 / vmax_h and with_noise["sigma"] != plain["sigma"]
+
+
+def test_a_single_band_feeds_all_three_channels(tmp_path):
+    assert default_assignment(["H"]) == ["H", "H", "H"]
+    rng = np.random.default_rng(0)
+    layers = {"H": (rng.random((64, 64)).astype(np.float32), rng.random((64, 64)).astype(np.float32))}
+    payload = build_payload(layers, tile_dir=tmp_path / "tiles")
+    assert [c["name"] for c in payload["channels"]] == ["H"]
+    assert payload["default"] == ["H", "H", "H"]
+    assert "__PAYLOAD__" not in render_html(payload)

@@ -153,9 +153,6 @@ def write_widget(target: str, layers_dir: Path, names: list[str], out: Path, dry
     """Build the widget from <layers_dir>/starless_<F>.fit and stars_<F>.fit."""
     from astropy.io import fits
 
-    if len(names) < 2:
-        print(f"{target}: widget needs at least two filters, skipping")
-        return None
     dest = out / slug(target) / "preview" / "widget.html"
     if dry_run:
         print(f"--- {target}/widget: would write {dest}")
