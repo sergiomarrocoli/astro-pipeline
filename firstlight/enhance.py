@@ -136,7 +136,7 @@ def split_layers(tdir: Path, names: list[str], splitter: str, siril_bin, dry_run
                 _write(layers / f"starless_{slug(n)}.fit", out[n][0], src)
                 _write(layers / f"stars_{slug(n)}.fit", out[n][1], src)
                 _write(layers / f"stars_pos_{slug(n)}.fit", np.maximum(out[n][1], 0), src)
-        _py_stage(layers, "split", lin, f"classical-union-protect:{cfg['fwhm']}:{cfg['star_threshold']}:{starsplit.MEDIUM}:{starsplit.BRIGHT}:{starsplit.PROTECT_LO}:{starsplit.PROTECT_HI}",
+        _py_stage(layers, "split", lin, f"classical-union-protect-wings:{starsplit.WING_POWER}:{cfg['fwhm']}:{cfg['star_threshold']}:{starsplit.MEDIUM}:{starsplit.BRIGHT}:{starsplit.PROTECT_LO}:{starsplit.PROTECT_HI}",
                   starless + stars, classical, dry_run)
     return layers
 

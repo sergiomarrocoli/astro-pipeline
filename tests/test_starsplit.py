@@ -148,3 +148,14 @@ def test_protected_knots_leave_no_dimple():
     _, out = ss.split(chans)
     centre = out["H"][0][118:123, 118:123].mean() - 100
     assert centre > 0.8 * (blob[118:123, 118:123].mean())            # the starless layer keeps the knot's brightness
+
+
+def test_a_saturated_stars_wide_wings_do_not_stay_behind_as_a_ring():
+    rng = np.random.default_rng(3)
+    n, c, sky, sigma = 301, 150, 0.01, 0.0005
+    yy, xx = np.mgrid[:n, :n]
+    rr = np.hypot(yy - c, xx - c)
+    img = (sky + rng.normal(0, sigma, (n, n)) + 1.0 * (1 + (rr / 1.6) ** 2) ** -1.5).astype(np.float32)   # wings ~ r^-3
+    _, out = ss.split({"H": img}, fwhm=2.5)
+    ring = out["H"][0][(rr > 14) & (rr < 30)]
+    assert abs(ring.mean() - sky) < 0.5 * sigma, "wings left in the starless layer"

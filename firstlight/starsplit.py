@@ -14,6 +14,7 @@ PROTECT_HI = 40.0       # ... and fully protects it here
 FULL_AT = 0.7          # blurred-mask value at which a pixel counts as fully masked
 MEDIUM = 5.0           # response multiples (of the threshold) where the mask tiers step up
 BRIGHT = 25.0
+WING_POWER = 0.25      # beyond BRIGHT the mask radius grows as (response / BRIGHT) ** WING_POWER (a saturated star's wings reach ~13 FWHM)
 DEFAULT_THRESH = 8.0   # multiples of the band-pass noise: clears faint stars without eating nebula detail (~16% coverage on a very dense field)
 
 
@@ -67,9 +68,9 @@ def star_response(lum: np.ndarray, fwhm: float = DEFAULT_FWHM) -> np.ndarray:
 def star_mask(lum: np.ndarray, fwhm: float = DEFAULT_FWHM, thresh: float = DEFAULT_THRESH) -> np.ndarray:
     """Soft mask in [0,1] with the mask size growing with the star's brightness.
 
-    Three tiers (response above thresh, MEDIUM*thresh, BRIGHT*thresh) are grown by 0.8, 1.6 and 4 FWHM:
-    a faint star needs a small hole, a bright one has wings that reach far beyond where it first clears
-    the threshold. Growing every star equally either leaves bright halos or erases the nebula.
+    Three tiers (response above thresh, MEDIUM*thresh, BRIGHT*thresh) are grown by 0.8, 1.6 and 4 FWHM, and the
+    brightest stars grow further still (see WING_POWER): a faint star needs a small hole, a bright one has wings
+    that reach far beyond where it first clears the threshold. Growing every star equally either leaves bright halos or erases the nebula.
     Only compact features count (see `compact`), so nebula knots are not mistaken for stars.
     """
     r = star_response(lum, fwhm)
@@ -80,6 +81,14 @@ def star_mask(lum: np.ndarray, fwhm: float = DEFAULT_FWHM, thresh: float = DEFAU
     grown = np.zeros_like(r)
     for mult, grow in tiers:
         grown = np.maximum(grown, dilate(((r > mult * cut) & compact).astype(np.float32), round(grow * fwhm)))
+    # Beyond the top tier a bigger star has proportionally wider wings: left outside the mask they stay in the
+    # starless layer as a faint ring around a flat fill. Stamp a round disc whose radius grows with brightness.
+    peaks = (r >= dilate(r, 3)) & (r > BRIGHT * cut) & compact
+    for py, px in zip(*np.nonzero(peaks)):
+        rad = 4.0 * fwhm * (float(r[py, px]) / (BRIGHT * cut)) ** WING_POWER
+        y0, y1, x0, x1 = max(0, int(py - rad) - 1), min(r.shape[0], int(py + rad) + 2), max(0, int(px - rad) - 1), min(r.shape[1], int(px + rad) + 2)
+        yy, xx = np.ogrid[y0:y1, x0:x1]
+        grown[y0:y1, x0:x1] = np.maximum(grown[y0:y1, x0:x1], ((yy - py) ** 2 + (xx - px) ** 2 <= rad * rad).astype(np.float32))
     soft = gblur(grown, 1.2 * fwhm)
     # Blurring a small mask lowers its centre (0.87 for a modest star), which would let 13% of the star
     # leak through. A smoothstep makes anything above ~0.7 fully masked and keeps a soft edge below it.
