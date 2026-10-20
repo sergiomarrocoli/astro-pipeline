@@ -8,7 +8,7 @@ from pathlib import Path
 from . import __version__
 from . import siril as siril_mod
 from .classify import build_manifest, scan
-from . import enhance, hotpixels, quality, settings, starnet
+from . import deepsnr, enhance, hotpixels, quality, settings, starnet
 from .finish import finish_target
 from .stack import Masters, dominant_exposure, stack_filter
 
@@ -64,6 +64,9 @@ def main(argv=None) -> int:
     grp.add_argument("--star-splitter", choices=enhance.SPLITTERS, default="classical",
                      help="how stars are separated: the built-in classical method, or StarNet2 (a local tool, see --starnet)")
     grp.add_argument("--starnet", metavar="PATH", help="the starnet2 executable (default: $FIRSTLIGHT_STARNET, then ~/tools/starnet2*/)")
+    grp.add_argument("--denoiser", choices=enhance.DENOISERS, default="siril",
+                     help="what --denoise (and the widget) uses on the starless layer: Siril's denoise, or DeepSNR (a local tool, see --deepsnr)")
+    grp.add_argument("--deepsnr", metavar="PATH", help="the deepsnr executable (default: $FIRSTLIGHT_DEEPSNR, then ~/tools/deepsnr*/)")
     grp.add_argument("--no-widget-enhance", action="store_true",
                      help="build the preview widget from the plain stacks instead of assuming the enhancements are on")
     ap.add_argument("--no-hot-pixel-fix", action="store_true",
@@ -83,10 +86,12 @@ def main(argv=None) -> int:
         return 2
     main_steps = tuple(st for st in enhance.ORDER if getattr(args, st.attr))
     starnet.set_exe(args.starnet)
-    why = enhance.unavailable(args.star_splitter)
-    if why:
-        print(f"error: --star-splitter {args.star_splitter}: {why}", file=sys.stderr)
-        return 2
+    deepsnr.set_exe(args.deepsnr)
+    for flag, choice in (("--star-splitter", args.star_splitter), ("--denoiser", args.denoiser)):
+        why = enhance.unavailable(choice)
+        if why:
+            print(f"error: {flag} {choice}: {why}", file=sys.stderr)
+            return 2
     if {"rl", "sx"} <= {st.key for st in main_steps}:
         print("note: --deconvolve has no effect with --remove-stars (the stars are discarded)")
     # The widget shows roughly what careful processing could give, so it assumes the enhancements are on.
@@ -179,7 +184,7 @@ def main(argv=None) -> int:
         try:
             finish_target(target, st, raws[target], out, siril_bin, dry_run=args.dry_run,
                           keep=args.keep_intermediates, main_steps=main_steps, widget_steps=widget_steps,
-                          splitter=args.star_splitter)
+                          splitter=args.star_splitter, denoiser=args.denoiser)
         except siril_mod.SirilError as exc:
             failed += 1
             print(f"error: {target}: {exc}", file=sys.stderr)
