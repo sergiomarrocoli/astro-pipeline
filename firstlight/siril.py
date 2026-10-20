@@ -50,15 +50,6 @@ def failed(returncode: int, log_text: str) -> bool:
     return returncode != 0 or bool(FAILURE.search(log_text))
 
 
-def starnet_exe() -> Optional[Path]:
-    """The StarNet executable configured in Siril's preferences, if it exists."""
-    for cfg in sorted(Path("~/.config/siril").expanduser().glob("config.*.ini"), reverse=True):
-        m = re.search(r"^starnet_exe=(.*)$", cfg.read_text(errors="replace"), re.M)
-        if m and m.group(1).strip() and Path(m.group(1).strip()).exists():
-            return Path(m.group(1).strip())
-    return None
-
-
 def run_script(siril: Path, workdir: Path, script: Path, log: Path) -> None:
     """Run a script with cwd=workdir; always keep the full log, raise on failure."""
     proc = subprocess.run(

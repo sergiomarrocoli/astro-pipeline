@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from firstlight import enhance, siril
+from firstlight import enhance, siril, starnet
 from firstlight.enhance import DECONVOLVE, DENOISE, ORDER, REMOVE_STARS, build_variant, normalise, variant_name
 
 
@@ -30,7 +30,7 @@ def test_variant_names():
 
 
 def test_layer_scripts_never_save_over_their_input():
-    for script in (enhance.denoise_script("H"), enhance.deconvolve_script("H"), enhance.starnet_script("H")):
+    for script in (enhance.denoise_script("H"), enhance.deconvolve_script("H")):
         lines = script.splitlines()
         assert lines[0].startswith("requires 1.4") and lines[1] == "load in_H" and lines[-1] == "close"
         assert not any(l == "save in_H" for l in lines)
@@ -45,23 +45,11 @@ def test_deconvolution_runs_on_the_stars_layer_with_a_psf_from_the_real_image():
 
 
 def test_starnet_splitter_availability(monkeypatch):
-    monkeypatch.setattr(siril, "starnet_exe", lambda: None)
-    assert "StarNet" in enhance.unavailable("starnet")
+    monkeypatch.setattr(starnet, "find_exe", lambda: None)
+    assert "StarNet2" in enhance.unavailable("starnet")
     assert enhance.unavailable("classical") is None
-    monkeypatch.setattr(siril, "starnet_exe", lambda: Path("/bin/ls"))
+    monkeypatch.setattr(starnet, "find_exe", lambda: Path("/bin/ls"))
     assert enhance.unavailable("starnet") is None
-
-
-def test_starnet_exe_reads_siril_config(tmp_path, monkeypatch):
-    cfg = tmp_path / ".config" / "siril"; cfg.mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    (cfg / "config.1.4.ini").write_text("[core]\nstarnet_exe=\nstarnet_weights=\n")
-    assert siril.starnet_exe() is None
-    (cfg / "config.1.4.ini").write_text(f"[core]\nstarnet_exe={tmp_path}/missing\n")
-    assert siril.starnet_exe() is None
-    real = tmp_path / "starnet++"; real.write_text("x")
-    (cfg / "config.1.4.ini").write_text(f"[core]\nstarnet_exe={real}\n")
-    assert siril.starnet_exe() == real
 
 
 @pytest.mark.parametrize("text,code,expected", [
@@ -104,7 +92,7 @@ def test_deconvolve_measures_psf_then_deconvolves_the_stars_layer(tmp_path, call
 def test_remove_stars_skips_deconvolution_and_uses_starnet_stage_when_asked(tmp_path, calls):
     out = build_variant(tmp_path, ["H"], [DECONVOLVE, REMOVE_STARS], "starnet", None)
     assert out == tmp_path / "linear+sx"
-    assert calls == [("siril", "layers", "sn_H"), ("py", "layers", "stars")]  # no rl, no dn
+    assert calls == [("py", "layers", "split")]  # no rl, no dn
 
 
 # ---- recombination on real (tiny) FITS files --------------------------------------------
