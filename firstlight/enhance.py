@@ -1,7 +1,7 @@
 """Optional enhancement: split stars from the rest, process each layer, recombine.
 
     linear (aligned, background removed)
-        |-- split --> starless + stars        (classical, or StarNet if configured)
+        |-- split --> starless + stars        (classical, or StarNet2)
         |      starless --> denoise  (--denoise)
         |      stars    --> deconvolve, clipped >= 0   (--deconvolve)
         |-- recombine: starless + stars   (or starless alone with --remove-stars)   -> linear+rl+dn/
@@ -24,7 +24,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from . import settings, siril, starsplit
+from . import settings, siril, starnet, starsplit
 from .finish import _stage
 from .pystage import py_stage, read as pystage_read, write as pystage_write
 from .stack import slug, stamp
@@ -63,8 +63,9 @@ def default_cfg() -> dict:
 
 
 def unavailable(splitter: str) -> Optional[str]:
-    if splitter == "starnet" and siril.starnet_exe() is None:
-        return "StarNet is not configured in Siril (Preferences > Miscellaneous)"
+    if splitter == "starnet" and starnet.find_exe() is None:
+        return ("StarNet2 not found: unpack it to ~/tools/starnet2*/, or set $FIRSTLIGHT_STARNET or pass --starnet "
+                "(starnetastro.com, the macOS command-line tool)")
     return None
 
 
@@ -85,10 +86,6 @@ def variant_name(steps: Sequence[Step]) -> str:
 def _script(flt: str, body: Sequence[str], out: Optional[str]) -> str:
     save = [f"save {out}"] if out else []
     return "\n".join([f"requires {siril.MIN_VERSION}", f"load in_{slug(flt)}", *body, *save, "close"]) + "\n"
-
-
-def starnet_script(flt: str) -> str:
-    return _script(flt, ["starnet -stretch -nostarmask"], f"starless_{slug(flt)}")
 
 
 def denoise_script(flt: str) -> str:
@@ -117,17 +114,17 @@ def split_layers(tdir: Path, names: list[str], splitter: str, siril_bin, dry_run
     starless = [f"starless_{slug(n)}.fit" for n in names]
     stars = [f"stars_{slug(n)}.fit" for n in names] + [f"stars_pos_{slug(n)}.fit" for n in names]
     if splitter == "starnet":
-        for n, src in zip(names, lin):
-            _stage(layers, f"sn_{slug(n)}", starnet_script(n), [src],
-                   lambda w, src=src, n=n: (w / f"in_{slug(n)}.fit").symlink_to(src),
-                   [f"starless_{slug(n)}.fit"], siril_bin, dry_run, keep)
+        exe = starnet.find_exe()
 
-        def stars_from_starless():
+        def with_starnet():
             for n, src in zip(names, lin):
-                d = _read(src) - _read(layers / f"starless_{slug(n)}.fit")
+                lin_data = _read(src)
+                starless_data = starnet.remove_stars(exe, src, layers)
+                d = lin_data - starless_data      # exact: starless + stars is the original
+                _write(layers / f"starless_{slug(n)}.fit", starless_data, src)
                 _write(layers / f"stars_{slug(n)}.fit", d, src)
                 _write(layers / f"stars_pos_{slug(n)}.fit", np.maximum(d, 0), src)   # RL input must not be negative
-        _py_stage(layers, "stars", lin + [layers / o for o in starless], "starnet", stars, stars_from_starless, dry_run)
+        _py_stage(layers, "split", lin + ([exe] if exe else []), "starnet2-linear", starless + stars, with_starnet, dry_run)
     else:
         def classical():
             data = {n: _read(src) for n, src in zip(names, lin)}

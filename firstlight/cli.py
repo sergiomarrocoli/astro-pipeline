@@ -8,7 +8,7 @@ from pathlib import Path
 from . import __version__
 from . import siril as siril_mod
 from .classify import build_manifest, scan
-from . import enhance, hotpixels, quality, settings
+from . import enhance, hotpixels, quality, settings, starnet
 from .finish import finish_target
 from .stack import Masters, dominant_exposure, stack_filter
 
@@ -62,7 +62,8 @@ def main(argv=None) -> int:
     for st in enhance.ORDER:
         grp.add_argument(st.flag, action="store_true", help=st.label)
     grp.add_argument("--star-splitter", choices=enhance.SPLITTERS, default="classical",
-                     help="how stars are separated: built-in classical method, or StarNet if configured in Siril")
+                     help="how stars are separated: the built-in classical method, or StarNet2 (a local tool, see --starnet)")
+    grp.add_argument("--starnet", metavar="PATH", help="the starnet2 executable (default: $FIRSTLIGHT_STARNET, then ~/tools/starnet2*/)")
     grp.add_argument("--no-widget-enhance", action="store_true",
                      help="build the preview widget from the plain stacks instead of assuming the enhancements are on")
     ap.add_argument("--no-hot-pixel-fix", action="store_true",
@@ -81,6 +82,7 @@ def main(argv=None) -> int:
         print(f"error: {args.folder} is not a directory", file=sys.stderr)
         return 2
     main_steps = tuple(st for st in enhance.ORDER if getattr(args, st.attr))
+    starnet.set_exe(args.starnet)
     why = enhance.unavailable(args.star_splitter)
     if why:
         print(f"error: --star-splitter {args.star_splitter}: {why}", file=sys.stderr)
