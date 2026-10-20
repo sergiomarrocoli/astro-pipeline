@@ -111,3 +111,41 @@ function viewToImage(w, h, rot, g, k, vx, vy) {
   const rx = vx / k + g.x0 - g.Wb / 2, ry = vy / k + g.y0 - g.Hb / 2;
   return [rx * c + ry * s + w / 2, -rx * s + ry * c + h / 2];
 }
+
+// ---- Curves ----------------------------------------------------------------------------------------------
+// A tone curve through control points [[x, y], ...], x and y in [0,1]. Interpolated with a monotone cubic
+// (Fritsch-Butland tangents), so it never overshoots between points the way a plain spline does: a curve through
+// rising points always rises. Before the first point and after the last it stays flat (moving an end point in
+// is a black or white point). Returns n + 1 samples for the inputs i / n.
+function curveLUT(pts, n = 1024) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0]), m = p.length, lut = new Float32Array(n + 1);
+  if (m < 2) { for (let i = 0; i <= n; i++) lut[i] = m ? p[0][1] : i / n; return lut; }
+  const dx = [], sl = [], t = new Array(m);
+  for (let k = 0; k < m - 1; k++) { dx[k] = p[k + 1][0] - p[k][0]; sl[k] = dx[k] > 1e-9 ? (p[k + 1][1] - p[k][1]) / dx[k] : 0; }
+  t[0] = sl[0]; t[m - 1] = sl[m - 2];
+  for (let k = 1; k < m - 1; k++) {
+    const a = sl[k - 1], b = sl[k];
+    t[k] = a * b <= 0 ? 0 : 3 * (dx[k - 1] + dx[k]) / ((2 * dx[k] + dx[k - 1]) / a + (dx[k] + 2 * dx[k - 1]) / b);
+  }
+  let k = 0;
+  for (let i = 0; i <= n; i++) {
+    const x = i / n;
+    if (x <= p[0][0]) { lut[i] = p[0][1]; continue; }
+    if (x >= p[m - 1][0]) { lut[i] = p[m - 1][1]; continue; }
+    while (x > p[k + 1][0]) k++;
+    const h = dx[k];
+    if (h < 1e-9) { lut[i] = p[k + 1][1]; continue; }
+    const s = (x - p[k][0]) / h, s2 = s * s, s3 = s2 * s;
+    const y = (2 * s3 - 3 * s2 + 1) * p[k][1] + (s3 - 2 * s2 + s) * h * t[k] + (3 * s2 - 2 * s3) * p[k + 1][1] + (s3 - s2) * h * t[k + 1];
+    lut[i] = y < 0 ? 0 : y > 1 ? 1 : y;
+  }
+  return lut;
+}
+
+// Look up x in [0,1] in a curve's samples, interpolating linearly between them.
+function curveAt(lut, x) {
+  const last = lut.length - 1, f = (x < 0 ? 0 : x > 1 ? 1 : x) * last, i = f | 0;
+  return i >= last ? lut[last] : lut[i] + (f - i) * (lut[i + 1] - lut[i]);
+}
+
+const curveIsIdentity = pts => pts.length === 2 && pts[0][0] === 0 && pts[0][1] === 0 && pts[1][0] === 1 && pts[1][1] === 1;
