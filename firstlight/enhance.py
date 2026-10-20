@@ -24,7 +24,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from . import settings, siril, starnet, starsplit
+from . import deepsnr, settings, siril, starnet, starsplit
 from .finish import _stage
 from .pystage import py_stage, read as pystage_read, write as pystage_write
 from .stack import slug, stamp
@@ -49,6 +49,7 @@ REMOVE_STARS = Step("sx", "--remove-stars", "output the starless layer only", Fa
 ORDER: tuple[Step, ...] = (DECONVOLVE, DENOISE, REMOVE_STARS)
 
 SPLITTERS = ("classical", "starnet")
+DENOISERS = ("siril", "deepsnr")
 
 # Multiplicative RL with total-variation regularisation (the default gradient-descent step does almost nothing,
 # and 25 iterations rings badly). The iteration count lives in settings.py: stars sharpen ~21% by 4 iterations,
@@ -62,9 +63,13 @@ def default_cfg() -> dict:
     return {**settings.DEFAULTS, "fwhm": starsplit.DEFAULT_FWHM}
 
 
-def unavailable(splitter: str) -> Optional[str]:
-    if splitter == "starnet" and starnet.find_exe() is None:
+def unavailable(choice: str) -> Optional[str]:
+    """Why a splitter or denoiser cannot be used here (None when it can)."""
+    if choice == "starnet" and starnet.find_exe() is None:
         return ("StarNet2 not found: unpack it to ~/tools/starnet2*/, or set $FIRSTLIGHT_STARNET or pass --starnet "
+                "(starnetastro.com, the macOS command-line tool)")
+    if choice == "deepsnr" and deepsnr.find_exe() is None:
+        return ("DeepSNR not found: unpack it to ~/tools/deepsnr*/, or set $FIRSTLIGHT_DEEPSNR or pass --deepsnr "
                 "(starnetastro.com, the macOS command-line tool)")
     return None
 
@@ -214,12 +219,20 @@ def final_layers(tdir: Path, names: list[str], steps: Sequence[Step], dry_run, c
 
 
 def _process_layers(tdir: Path, names: list[str], steps: Sequence[Step], splitter: str, siril_bin,
-                    dry_run: bool, keep: bool, cfg: dict) -> None:
+                    dry_run: bool, keep: bool, cfg: dict, denoiser: str = "siril") -> None:
     """Split, then denoise the starless layer / deconvolve the stars layer as the steps ask."""
     layers = split_layers(tdir, names, splitter, siril_bin, dry_run, keep, cfg)
     keys = {s.key for s in steps}
     base = tdir / "linear"
-    if "dn" in keys:
+    if "dn" in keys and denoiser == "deepsnr":
+        exe = deepsnr.find_exe()
+        for n in names:
+            src = layers / f"starless_{slug(n)}.fit"
+            _py_stage(layers, f"dn_{slug(n)}", [src] + ([exe] if exe else []), "deepsnr-linear",
+                      [f"starless_dn_{slug(n)}.fit"],
+                      lambda src=src, n=n: _write(layers / f"starless_dn_{slug(n)}.fit", deepsnr.denoise(exe, src, layers), src),
+                      dry_run)
+    elif "dn" in keys:
         for n in names:
             src = layers / f"starless_{slug(n)}.fit"
             _stage(layers, f"dn_{slug(n)}", denoise_script(n), [src],
@@ -242,21 +255,21 @@ def _process_layers(tdir: Path, names: list[str], steps: Sequence[Step], splitte
 
 def build_variant(tdir: Path, names: list[str], steps: Sequence[Step], splitter: str,
                   siril_bin: Optional[Path], dry_run: bool = False, keep: bool = False,
-                  cfg: Optional[dict] = None) -> Path:
+                  cfg: Optional[dict] = None, denoiser: str = "siril") -> Path:
     """Folder holding linear_<F>.fit for this combination of steps (the plain stacks if there are none)."""
     steps = normalise(steps)
     if not steps:
         return tdir / "linear"
     cfg = cfg or default_cfg()
-    _process_layers(tdir, names, steps, splitter, siril_bin, dry_run, keep, cfg)
+    _process_layers(tdir, names, steps, splitter, siril_bin, dry_run, keep, cfg, denoiser)
     return recombine(tdir, names, steps, dry_run, cfg)
 
 
 def build_layers(tdir: Path, names: list[str], steps: Sequence[Step], splitter: str,
                  siril_bin: Optional[Path], dry_run: bool = False, keep: bool = False,
-                 cfg: Optional[dict] = None) -> Path:
+                 cfg: Optional[dict] = None, denoiser: str = "siril") -> Path:
     """Folder holding starless_<F>.fit and stars_<F>.fit for this combination of steps. Always splits."""
     steps = normalise(steps)
     cfg = cfg or default_cfg()
-    _process_layers(tdir, names, steps, splitter, siril_bin, dry_run, keep, cfg)
+    _process_layers(tdir, names, steps, splitter, siril_bin, dry_run, keep, cfg, denoiser)
     return final_layers(tdir, names, steps, dry_run, cfg)

@@ -94,7 +94,7 @@ def _stage(d: Path, name: str, script: str, inputs: list[Path], setup: Callable[
 
 def finish_target(target: str, stacks: dict[str, Path], raws: dict[str, str], out: Path,
                   siril_bin: Optional[Path], dry_run=False, keep=False,
-                  main_steps=(), widget_steps=(), splitter="classical") -> None:
+                  main_steps=(), widget_steps=(), splitter="classical", denoiser="siril") -> None:
     """stacks: filter -> stack fits; raws: filter -> path of one raw sub (for the 'before' image).
 
     main_steps are the enhancement steps the user asked for; they feed the previews. widget_steps are
@@ -120,10 +120,10 @@ def finish_target(target: str, stacks: dict[str, Path], raws: dict[str, str], ou
         cfg = settings.resolve(tdir, {n: linear / f"linear_{slug(n)}.fit" for n in names})
         print(f"{target}: star FWHM {cfg['fwhm']} px (measured on {cfg.get('fwhm_measured_on')}); settings in {tdir.name}/settings.json")
 
-    main_dir = enhance.build_variant(tdir, names, main_steps, splitter, siril_bin, dry_run, keep, cfg)   # errors here are the user's problem
+    main_dir = enhance.build_variant(tdir, names, main_steps, splitter, siril_bin, dry_run, keep, cfg, denoiser)   # errors here are the user's problem
     widget_layers = None
     try:
-        widget_layers = enhance.build_layers(tdir, names, widget_steps, splitter, siril_bin, dry_run, keep, cfg)
+        widget_layers = enhance.build_layers(tdir, names, widget_steps, splitter, siril_bin, dry_run, keep, cfg, denoiser)
     except siril.SirilError as exc:
         print(f"warning: {target}: could not build the widget's layers, skipping the widget\n{exc}")
 
