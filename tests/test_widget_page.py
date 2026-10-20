@@ -172,3 +172,6 @@ def test_double_click_removes_a_point_but_never_an_end_point(page):
     assert page.evaluate("() => curves.m.length") == 2
     page.click("#reset")
     assert page.errors == []
+def test_the_widget_links_to_the_report_next_to_its_folder(page):
+    # the widget is <target>/preview/widget.html and the report is <target>/report.html
+    assert page.get_attribute(".rlink", "href") == "../report.html"
