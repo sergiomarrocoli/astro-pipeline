@@ -108,3 +108,8 @@ def test_export_is_the_framed_size(page):
         page.click("#save")
     assert list(Image.open(dl.value.path()).size) == expected
     assert page.errors == []
+
+
+def test_the_widget_links_to_the_report_next_to_its_folder(page):
+    # the widget is <target>/preview/widget.html and the report is <target>/report.html
+    assert page.get_attribute(".rlink", "href") == "../report.html"

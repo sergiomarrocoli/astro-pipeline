@@ -59,6 +59,8 @@
   .view.editing { cursor:default; }
   .two { display:grid; grid-template-columns:1fr 1fr; gap:6px; } .two button { margin-top:6px; }
   .note { color:var(--dim); font-size:11px; margin-top:10px; } .hide { display:none; }
+  .rlink { display:inline-block; margin:6px 0 10px; font-size:12px; color:var(--accent); text-decoration:none; }
+  .rlink:hover { text-decoration:underline; }
   #ms { color:var(--dim); font-size:11px; float:right; font-weight:400; }
 </style>
 </head>
@@ -78,6 +80,7 @@
     <h1>Preview <span id="ms"></span></h1>
     <div class="sub">Starless and stars layers, already processed. Play with colour and stretch here.</div>
     <div class="note" id="info" style="margin-top:0"></div>
+    <a class="rlink" href="../report.html" target="_blank" rel="noopener">Open the report &rarr;</a>
 
     <details open><summary>Palette</summary>
       <label>Preset <select id="palette"></select></label>
