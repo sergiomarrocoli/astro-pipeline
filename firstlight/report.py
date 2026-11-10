@@ -80,7 +80,7 @@ def zone_map(a: np.ndarray, top_down: bool = False, grid: int = 3) -> dict:
     """Median star FWHM and roundness in a grid x grid arrangement of the image, row 0 = top of the picture."""
     st = quality.measure_stars(np.asarray(a, dtype=np.float32), n=400)
     h, w = a.shape
-    cells = {}
+    cells, every = {}, []
     for y, x, fw, ra, _ in (st if len(st) else []):
         if not (np.isfinite(fw) and np.isfinite(ra)):
             continue
@@ -88,6 +88,7 @@ def zone_map(a: np.ndarray, top_down: bool = False, grid: int = 3) -> dict:
         if not top_down:
             row = grid - 1 - row                                   # Siril stacks are bottom-up: flip to display orientation
         cells.setdefault((row, min(grid - 1, int(grid * x / w))), []).append((fw, ra))
+        every.append((fw, ra))
     fwhm = [[None] * grid for _ in range(grid)]
     rnd = [[None] * grid for _ in range(grid)]
     count = [[0] * grid for _ in range(grid)]
@@ -96,7 +97,9 @@ def zone_map(a: np.ndarray, top_down: bool = False, grid: int = 3) -> dict:
         if len(v) >= 5:
             fwhm[r][c] = float(np.median([p[0] for p in v]))
             rnd[r][c] = float(np.median([p[1] for p in v]))
-    return {"fwhm": fwhm, "roundness": rnd, "count": count}
+    overall = ({"fwhm": float(np.median([p[0] for p in every])), "roundness": float(np.median([p[1] for p in every]))}
+               if every else {"fwhm": None, "roundness": None})
+    return {"fwhm": fwhm, "roundness": rnd, "count": count, "overall": overall}
 
 
 def svg_series(series: dict[str, list[tuple[float, float]]], width: int = 420, height: int = 130, ylabel: str = "") -> str:
@@ -187,10 +190,13 @@ a { color:var(--accent); }
 def build_html(target: str, data: dict) -> str:
     esc = html.escape
     s = data["summary"]
+    stack = {f: z.get("overall") or {} for f, z in data.get("zones", {}).items()}
+    two = lambda v, u="": (f"{v:.2f}{u}" if v else "–")
     rows = "".join(
         f"<tr><td>{esc(r['filter'])}</td><td>{', '.join(str(int(e)) for e in r['exposure']) or '–'} s</td>"
         f"<td>{r['used']} of {r['available']}</td><td>{r['rejected'] or ''}</td><td>{_fmt_time(r['integration'])}</td>"
-        f"<td>{('%.2f px' % r['fwhm']) if r['fwhm'] else '–'}</td><td>{('%.2f' % r['roundness']) if r['roundness'] else '–'}</td></tr>"
+        f"<td>{two(r['fwhm'], ' px')}</td><td>{two(r['roundness'])}</td>"
+        f"<td>{two(stack.get(r['filter'], {}).get('fwhm'), ' px')}</td><td>{two(stack.get(r['filter'], {}).get('roundness'))}</td></tr>"
         for r in s["rows"])
     total = sum(r["integration"] for r in s["rows"])
     notes = "".join(f"<li class='warn'>{esc(n)}</li>" for n in s["notes"])
@@ -198,7 +204,7 @@ def build_html(target: str, data: dict) -> str:
                        for r in s["rows"] for f in r["rejected_frames"])
     charts = ""
     if data.get("series"):
-        for title, key in (("Star size (FWHM, px)", "fwhm"), ("Stars detected", "stars"), ("Sky noise", "noise")):
+        for title, key in (("Star size (FWHM, px)", "fwhm"), ("Star roundness (1 = round)", "roundness"), ("Stars detected", "stars"), ("Sky noise", "noise")):
             ser = data["series"].get(key)
             if ser:
                 charts += f"<div class='card'><h3>{title}</h3>{svg_series(ser, ylabel=title)}</div>"
@@ -218,7 +224,8 @@ def build_html(target: str, data: dict) -> str:
 <div class="hero">{hero_before}<figure><img alt="The draft image" src="data:image/jpeg;base64,{data['draft']}"><figcaption>{cap}</figcaption></figure></div>
 <p>Total integration {_fmt_time(total)}. Open <a href="preview/widget.html">the interactive widget</a> to change palette, stretch and colour, rotate and crop, and zoom to full resolution.</p>
 
-<h2>The data</h2><div class="scroll"><table><tr><th>Filter</th><th>Exposure</th><th>Frames used</th><th>Rejected</th><th>Integration</th><th>Star FWHM</th><th>Roundness</th></tr>{rows}</table></div>
+<h2>The data</h2><div class="scroll"><table><tr><th>Filter</th><th>Exposure</th><th>Frames used</th><th>Rejected</th><th>Integration</th><th>Sub FWHM</th><th>Sub roundness</th><th>Stack FWHM</th><th>Stack roundness</th></tr>{rows}</table></div>
+<p class="dim">Sub: median over the individual frames used. Stack: median over the stars in the finished stack. Stacking averages out tracking and seeing differences between frames, so the stack is rounder and a little softer than a typical sub; a large jump between the two means the frames varied a lot.</p>
 {('<ul class="notes">' + notes + '</ul>') if notes else ''}
 
 <h2>Frame quality</h2>
@@ -227,7 +234,7 @@ def build_html(target: str, data: dict) -> str:
 {('<p>' + legend + '</p>') if legend else ''}<div class="grid2">{charts}</div>
 
 <h2>Across the field</h2>
-<p class="dim">Median star size and roundness in each ninth of the picture (top row is the top of the image). A strong, one-directional gradient means the sensor is tilted relative to the optical axis; high at the edges all round means the spacing or field curvature.</p>
+<p class="dim">Median star size and roundness in each ninth of the finished stack (the same stars as the Stack columns above) (top row is the top of the image). A strong, one-directional gradient means the sensor is tilted relative to the optical axis; high at the edges all round means the spacing or field curvature.</p>
 <div class="grid2">{zones}</div>
 
 <h2>What the pipeline did</h2><ul class="plain">{proc}</ul>
@@ -254,7 +261,7 @@ def write(out: Path, target: str, names: list[str], cfg: Optional[dict], layers_
     Image.fromarray(img).save(tdir / "draft.jpg", quality=92)
 
     # per-frame trends, in minutes since the first frame of the target
-    series: dict = {"fwhm": {}, "stars": {}, "noise": {}}
+    series: dict = {"fwhm": {}, "roundness": {}, "stars": {}, "noise": {}}
     t0 = None
     frames = [f for f in (fq or {}).get("frames", []) if f["target"] == target]
     for f in sorted(frames, key=lambda f: f["date_obs"]):
@@ -291,7 +298,7 @@ def write(out: Path, target: str, names: list[str], cfg: Optional[dict], layers_
         if bits:
             proc.append("<b>Sky gradient:</b> removed per filter (largest variation across the frame, in noise sigma: " + ", ".join(bits) + ").")
     if settings.get("fwhm"):
-        proc.append(f"<b>Stars:</b> separated from the nebula; measured star FWHM {settings['fwhm']} px on {settings.get('fwhm_measured_on', 'H')}.")
+        proc.append(f"<b>Stars:</b> separated from the nebula; star FWHM {settings['fwhm']} px (estimate used to size the star mask and PSF, measured on the stack with a separate method) on {settings.get('fwhm_measured_on', 'H')}.")
         proc.append(f"<b>Starless layer:</b> denoised ({round(100 * settings.get('denoise_amount', 1))}% blend). <b>Stars layer:</b> deconvolved "
                     f"({settings.get('rl_iterations')} iterations), noise-gated, negative lobes clipped.")
     proc.append(f"<b>Draft image:</b> palette {''.join(r_[0] if r_ else '?' for r_ in info['assignment'])} (R, G, B), "
