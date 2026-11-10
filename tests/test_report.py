@@ -132,3 +132,26 @@ def test_large_hot_pixel_counts_get_thousands_separators(tmp_path):
     assert f"{15093:,}" == "15,093"           # the report formats the count this way
     import inspect
     assert ":," in inspect.getsource(report.write)
+
+
+def test_zone_map_reports_an_overall_stack_median():
+    zm = report.zone_map(star_stack(), top_down=True)
+    assert zm["overall"]["fwhm"] > 0 and 0 < zm["overall"]["roundness"] <= 1
+
+
+def test_table_shows_sub_and_stack_columns_side_by_side():
+    fq = {"frames": [frame("H", 1)]}
+    data = {"summary": report.summarise("T1", manifest(H=[300]), fq), "draft": "AAAA", "series": {},
+            "zones": {"H": {"fwhm": [[None] * 3] * 3, "roundness": [[None] * 3] * 3, "count": [[0] * 3] * 3,
+                            "overall": {"fwhm": 3.41, "roundness": 0.88}}},
+            "processing": [], "before": None, "when": None, "setup": None, "draft_caption": "c"}
+    html_out = report.build_html("T1", data)
+    assert "Sub FWHM" in html_out and "Stack FWHM" in html_out and "3.41 px" in html_out and "0.88" in html_out
+
+
+def test_report_charts_roundness_over_time():
+    fq = {"frames": [frame("H", 1)]}
+    data = {"summary": report.summarise("T1", manifest(H=[300]), fq), "draft": "AAAA",
+            "series": {"fwhm": {"H": [(0, 2.0), (5, 2.2)]}, "roundness": {"H": [(0, 0.8), (5, 0.6)]}},
+            "zones": {}, "processing": [], "before": None, "when": None, "setup": None, "draft_caption": "c"}
+    assert "Star roundness" in report.build_html("T1", data)
