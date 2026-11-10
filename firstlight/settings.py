@@ -31,49 +31,12 @@ DEFAULTS = {
 }
 
 
-def measure_fwhm(a: np.ndarray, n: int = 200, min_sep: int = 14) -> float:
-    """Median star FWHM in pixels, from the half-maximum radius of bright, unsaturated, isolated stars."""
-    a = np.nan_to_num(np.asarray(a, dtype=np.float32))
-    bg, sg = float(np.median(a[::7, ::7])), starsplit.noise_sigma(a)
-    top = float(np.percentile(a, 99.995))
-    ys, xs = np.nonzero((a > bg + 40 * sg) & (a < 0.7 * top))        # bright but not saturated
-    order = np.argsort(a[ys, xs])[::-1]
-    taken: dict[tuple[int, int], tuple[int, int]] = {}
-    picks = []
-    for i in order:
-        y, x = int(ys[i]), int(xs[i])
-        cell = (y // min_sep, x // min_sep)
-        near = [taken.get((cell[0] + dy, cell[1] + dx)) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
-        if any(p and abs(p[0] - y) < min_sep and abs(p[1] - x) < min_sep for p in near):
-            continue
-        # must be the local maximum of its neighbourhood, with room around it
-        if 12 <= y < a.shape[0] - 12 and 12 <= x < a.shape[1] - 12 and a[y, x] == a[y - 2:y + 3, x - 2:x + 3].max():
-            taken[cell] = (y, x)
-            picks.append((y, x))
-        if len(picks) >= n:
-            break
-    yy, xx = np.mgrid[-8:9, -8:9]
-    out = []
-    for y, x in picks:
-        p = a[y - 8:y + 9, x - 8:x + 9]
-        edge = np.concatenate([p[0], p[-1], p[:, 0], p[:, -1]])
-        w = np.maximum(p - np.median(edge), 0)
-        if w[8, 8] <= 0:
-            continue
-        # Adaptive Gaussian-window moments: the window's own width shrinks the measured variance, so divide
-        # it back out (1/s_true^2 = 1/s_eff^2 - 1/s_win^2) and iterate. Converges to the fitted sigma.
-        sig = 2.5
-        r2 = yy ** 2 + xx ** 2
-        for _ in range(10):
-            ww = w * np.exp(-r2 / (2 * sig ** 2))
-            tot = ww.sum()
-            if tot <= 0:
-                break
-            eff2 = 0.5 * (ww * r2).sum() / tot
-            inv = 1.0 / eff2 - 1.0 / sig ** 2
-            sig = float(np.clip(np.sqrt(1.0 / inv) if inv > 1e-9 else sig * 2, 0.5, 6.0))
-        out.append(2.355 * sig)
-    return float(np.clip(np.median(out), 1.2, 8.0)) if out else starsplit.DEFAULT_FWHM
+def measure_fwhm(a: np.ndarray) -> float:
+    """Median star FWHM in pixels of a stack. One definition for the whole tool: the same stars and the
+    same elliptical adaptive-moments fit as the frame-quality measurement and the report's field map."""
+    st = quality.measure_stars(np.nan_to_num(np.asarray(a, dtype=np.float32)))
+    st = st[np.all(np.isfinite(st), axis=1)] if len(st) else st
+    return float(np.clip(np.median(st[:, 2]), 1.2, 8.0)) if len(st) else starsplit.DEFAULT_FWHM
 
 
 def load(tdir: Path) -> dict:
